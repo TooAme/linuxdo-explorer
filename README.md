@@ -1,16 +1,13 @@
-# Linux.do Explorer
+![icon](https://github.com/user-attachments/assets/0ba29abb-6dee-43be-b632-5a7b12e8baae#pic_center)
 
-<div align="center">
+  # Linux.do Explorer
 
-[![Author](https://img.shields.io/badge/作者-TooAme-blue?style=flat-square)](https://linux.do/u/tooame/summary)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.6-orange?style=flat-square)](https://github.com/TooAme/linuxdo-explorer)
-[![GitHub Stars](https://img.shields.io/github/stars/TooAme/linuxdo-explorer?style=flat-square&logo=github)](https://github.com/TooAme/linuxdo-explorer)
-[![VSCode](https://img.shields.io/badge/VSCode-%5E1.85.0-blue?style=flat-square&logo=visual-studio-code)](https://code.visualstudio.com/)
-
-</div>
-
-**在 VSCode 中无缝浏览 Linux.do 论坛**
+  **在 VSCode 中无缝浏览 Linux.do 论坛**
+  
+  [![Author](https://img.shields.io/badge/Linux.do-TooAme-blue?style=flat-square)](https://linux.do/u/tooame/summary)
+  [![License](https://img.shields.io/badge/license-GPL3.0-green?style=flat-square)](LICENSE)
+  [![GitHub Stars](https://img.shields.io/github/stars/TooAme/linuxdo-explorer?style=flat-square&logo=github)](https://github.com/TooAme/linuxdo-explorer)
+  [![VSCode](https://img.shields.io/badge/VSCode-%5E1.85.0-aqua?style=flat-square&logo=visual-studio-code)](https://code.visualstudio.com/)
 
 ---
 
@@ -50,7 +47,3 @@
 5.  点击任意一个请求（推荐点击 `linux.do` 主域名的请求），在右侧面板找到 **"请求头 (Request Headers)"**。
 6.  找到 **`Cookie:`** 字段，复制其后的完整内容。
 7.  回到 VSCode，在插件登录界面粘贴刚才复制的 Cookie。
-
-## License
-
-MIT © TooAme
