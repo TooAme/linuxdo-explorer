@@ -15,23 +15,112 @@ import type {
 export class DiscourseApiClient {
   private cookie: string = '';
   private cookieInitialized: boolean = false;
+  private csrfToken: string = '';
 
   constructor(private getCookieFunc: () => Promise<string>) {
     // 不在构造函数中调用异步方法
+  }
+
+  /**
+   * 从 Cookie 中提取 CSRF Token
+   * 也可能在 session cookie 中
+   */
+  private extractCsrfToken(cookieString: string): string {
+    // 尝试方法1: 直接从 csrf_token 字段提取
+    let match = cookieString.match(/csrf_token=([^;]+)/);
+    if (match) {
+      return decodeURIComponent(match[1]);
+    }
+
+    // 尝试方法2: 从 _t cookie 中提取（Discourse 使用的主要 session cookie）
+    match = cookieString.match(/_t=([^;]+)/);
+    if (match) {
+      // _t cookie 本身可能就是 CSRF token
+      return decodeURIComponent(match[1]);
+    }
+
+    return '';
+  }
+
+  /**
+   * 通过访问首页获取 CSRF Token
+   */
+  private async fetchCsrfTokenFromHomepage(): Promise<string> {
+    try {
+      console.log('[DiscourseApiClient] 尝试从首页获取 CSRF Token...');
+      const url = DISCOURSE_API.BASE_URL;
+
+      const response = await this.httpsRequest(url, {
+        method: 'GET',
+        headers: {
+          'Cookie': this.cookie,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br'
+        }
+      });
+
+      console.log('[DiscourseApiClient] 首页响应状态:', response.statusCode);
+      console.log('[DiscourseApiClient] 首页内容长度:', response.body.length);
+
+      // 尝试多种 meta 标签格式
+      let match = response.body.match(/<meta name=["']csrf-token["'] content=["']([^"']+)["']/);
+      if (!match) {
+        match = response.body.match(/<meta content=["']([^"']+)["'] name=["']csrf-token["']/);
+      }
+      if (!match) {
+        match = response.body.match(/csrf[_-]?token["']?\s*[:=]\s*["']([^"']+)["']/i);
+      }
+
+      if (match) {
+        const token = match[1];
+        console.log('[DiscourseApiClient] 从首页获取到 CSRF Token:', token.substring(0, 30) + '...');
+        return token;
+      }
+
+      console.log('[DiscourseApiClient] 首页中未找到 CSRF Token');
+      console.log('[DiscourseApiClient] 首页前1000字符:', response.body.substring(0, 1000));
+      return '';
+    } catch (error: any) {
+      console.error('[DiscourseApiClient] 获取 CSRF Token 失败:', error.message);
+      return '';
+    }
   }
 
   private async ensureCookieLoaded(): Promise<void> {
     if (!this.cookieInitialized) {
       this.cookie = await this.getCookieFunc();
       this.cookieInitialized = true;
-      console.log('[DiscourseApiClient] Cookie已加载');
+
+      console.log('[DiscourseApiClient] Cookie已加载，长度:', this.cookie.length);
+      console.log('[DiscourseApiClient] Cookie内容（前500字符）:', this.cookie.substring(0, 500));
+
+      // 先尝试从 Cookie 中提取
+      this.csrfToken = this.extractCsrfToken(this.cookie);
+
+      // 如果从 Cookie 提取失败，尝试从首页获取
+      if (!this.csrfToken) {
+        console.log('[DiscourseApiClient] Cookie中未找到 CSRF Token，尝试从首页获取...');
+        this.csrfToken = await this.fetchCsrfTokenFromHomepage();
+      }
+
+      console.log('[DiscourseApiClient] CSRF Token:', this.csrfToken ? `已提取: ${this.csrfToken.substring(0, 20)}...` : '未找到');
     }
   }
 
   async refreshCookie(): Promise<void> {
     this.cookie = await this.getCookieFunc();
     this.cookieInitialized = true;
+
+    // 重新提取 CSRF Token
+    this.csrfToken = this.extractCsrfToken(this.cookie);
+    if (!this.csrfToken) {
+      this.csrfToken = await this.fetchCsrfTokenFromHomepage();
+    }
+
     console.log('[DiscourseApiClient] Cookie已刷新');
+    console.log('[DiscourseApiClient] CSRF Token:', this.csrfToken ? '已提取' : '未找到');
   }
 
   /**
@@ -148,31 +237,44 @@ export class DiscourseApiClient {
       const headers: Record<string, string> = {
         'Cookie': this.cookie,
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0',
-        'Accept': 'application/json',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
         'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'max-age=0',
         'Sec-CH-UA': '"Chromium";v="142", "Microsoft Edge";v="142", "Not_A Brand";v="99"',
-        'Sec-CH-UA-Arch': '"x86"',
-        'Sec-CH-UA-Bitness': '"64"',
-        'Sec-CH-UA-Full-Version': '"142.0.3595.94"',
-        'Sec-CH-UA-Full-Version-List': '"Chromium";v="142.0.7444.176", "Microsoft Edge";v="142.0.3595.94", "Not_A Brand";v="99.0.0.0"',
         'Sec-CH-UA-Mobile': '?0',
-        'Sec-CH-UA-Model': '""',
         'Sec-CH-UA-Platform': '"Windows"',
-        'Sec-CH-UA-Platform-Version': '"19.0.0"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
         ...(options?.headers as Record<string, string> || {})
       };
 
-      // 如果是 POST 请求，添加 Content-Type
-      if (method === 'POST' && body) {
-        headers['Content-Type'] = 'application/json';
-        headers['Content-Length'] = Buffer.byteLength(body).toString();
+      // 如果是 POST/PUT/DELETE 请求，使用 AJAX 风格的请求头
+      if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
+        headers['Content-Type'] = 'application/json; charset=UTF-8';
+        headers['X-Requested-With'] = 'XMLHttpRequest';
+        headers['Origin'] = DISCOURSE_API.BASE_URL.replace(/\/$/, '');
+        headers['Referer'] = DISCOURSE_API.BASE_URL;
+        headers['Sec-Fetch-Dest'] = 'empty';
+        headers['Sec-Fetch-Mode'] = 'cors';
+        headers['Sec-Fetch-Site'] = 'same-origin';
+
+        // 添加 CSRF Token
+        if (this.csrfToken) {
+          headers['X-CSRF-Token'] = this.csrfToken;
+          console.log('[DiscourseApiClient] 添加 CSRF Token 到请求头');
+        } else {
+          console.warn('[DiscourseApiClient] 警告: CSRF Token 未找到，POST 请求可能失败');
+        }
+
+        if (body) {
+          headers['Content-Length'] = Buffer.byteLength(body).toString();
+        }
+      } else {
+        // GET 请求使用导航风格的请求头
+        headers['Cache-Control'] = 'max-age=0';
+        headers['Sec-Fetch-Dest'] = 'document';
+        headers['Sec-Fetch-Mode'] = 'navigate';
+        headers['Sec-Fetch-Site'] = 'same-origin';
+        headers['Sec-Fetch-User'] = '?1';
+        headers['Upgrade-Insecure-Requests'] = '1';
       }
 
       const response = await this.httpsRequest(url, {

@@ -4,7 +4,7 @@ import type { Topic } from '../api/ApiTypes';
 export class TopicService {
   constructor(private apiClient: DiscourseApiClient) { }
 
-  async getLatestTopics(page: number = 0, limit: number = 20): Promise<Topic[]> {
+  async getLatestTopics(page: number = 0, limit: number = 30): Promise<Topic[]> {
     try {
       const topics = await this.apiClient.getLatestTopics(page);
       // 限制返回的话题数量
@@ -14,7 +14,7 @@ export class TopicService {
     }
   }
 
-  async getCategoryTopics(categoryId: number, page: number = 0, limit: number = 20): Promise<Topic[]> {
+  async getCategoryTopics(categoryId: number, page: number = 0, limit: number = 30): Promise<Topic[]> {
     try {
       const topics = await this.apiClient.getCategoryTopics(categoryId, page);
       // 限制返回的话题数量

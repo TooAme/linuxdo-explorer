@@ -2,7 +2,7 @@
   "name": "linuxdo-explorer",
   "displayName": "Linux.do Explorer",
   "description": "Surfing the Linux.do in Visual Studio Code",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "publisher": "TooAme",
   "icon": "images/logo.png",
   "engines": {
@@ -123,22 +123,22 @@
         },
         {
           "command": "linuxdo.replyToTopic",
-          "when": "view == linuxdoExplorer && viewItem == topic",
+          "when": "false && view == linuxdoExplorer && viewItem == topic",
           "group": "navigation@1"
         },
         {
           "command": "linuxdo.likeTopic",
-          "when": "view == linuxdoExplorer && viewItem == topic",
+          "when": "false && view == linuxdoExplorer && viewItem == topic",
           "group": "navigation@2"
         },
         {
           "command": "linuxdo.replyToTopic",
-          "when": "view == linuxdoExplorer && viewItem == post",
+          "when": "false && view == linuxdoExplorer && viewItem == post",
           "group": "navigation@1"
         },
         {
           "command": "linuxdo.likeTopic",
-          "when": "view == linuxdoExplorer && viewItem == post",
+          "when": "false && view == linuxdoExplorer && viewItem == post",
           "group": "navigation@2"
         },
         {

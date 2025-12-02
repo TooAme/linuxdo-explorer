@@ -237,7 +237,7 @@ export class LinuxDoTreeDataProvider implements vscode.TreeDataProvider<TreeItem
 
     // 创建回复节点
     const postNodes = sortedPosts.map(post => {
-      const previewText = this.extractTextFromHtml(post.cooked).substring(0, 50);
+      const previewText = this.extractTextFromHtml(post.cooked);
       return new TreeItemNode(
         {
           type: NodeType.POST,
@@ -245,7 +245,7 @@ export class LinuxDoTreeDataProvider implements vscode.TreeDataProvider<TreeItem
           postId: post.id,
           topicId: topicId,
           label: ` ${post.username}`,
-          description: `#${post.post_number} - ${previewText}}`
+          description: `#${post.post_number} - ${previewText}`
         },
         vscode.TreeItemCollapsibleState.None
       );
