@@ -288,7 +288,7 @@ export class DiscourseApiClient {
   async likePost(postId: number): Promise<{ success: boolean }> {
     const endpoint = '/post_actions.json';
     const body = JSON.stringify({
-      id: postId,
+      post_id: postId,  // 使用 post_id 而不是 id
       post_action_type_id: 2, // 2 代表点赞
       flag_topic: false
     });

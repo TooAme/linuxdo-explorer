@@ -11,6 +11,21 @@
   "categories": [
     "Other"
   ],
+  "keywords": [
+    "linux.do",
+    "forum",
+    "browser",
+    "linuxdo"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TooAme/linuxdo-explorer"
+  },
+  "bugs": {
+    "url": "https://github.com/TooAme/linuxdo-explorer/issues"
+  },
+  "homepage": "https://github.com/TooAme/linuxdo-explorer#readme",
+  "license": "MIT",
   "activationEvents": [
     "onView:linuxdoExplorer"
   ],

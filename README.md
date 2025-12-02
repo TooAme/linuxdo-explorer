@@ -1,6 +1,16 @@
-  # Linux.do Explorer
+# Linux.do Explorer
 
-  **在 VSCode 中无缝浏览 Linux.do 论坛**
+<div align="center">
+
+[![Author](https://img.shields.io/badge/作者-TooAme-blue?style=flat-square)](https://linux.do/u/tooame/summary)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.0.6-orange?style=flat-square)](https://github.com/TooAme/linuxdo-explorer)
+[![GitHub Stars](https://img.shields.io/github/stars/TooAme/linuxdo-explorer?style=flat-square&logo=github)](https://github.com/TooAme/linuxdo-explorer)
+[![VSCode](https://img.shields.io/badge/VSCode-%5E1.85.0-blue?style=flat-square&logo=visual-studio-code)](https://code.visualstudio.com/)
+
+</div>
+
+**在 VSCode 中无缝浏览 Linux.do 论坛**
 
 ---
 
