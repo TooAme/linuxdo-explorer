@@ -1,0 +1,14 @@
+{
+  "editor.formatOnSave": true,
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "files.exclude": {
+    "out": false,
+    "node_modules": true
+  },
+  "search.exclude": {
+    "out": true,
+    "node_modules": true
+  },
+  "typescript.tsdk": "node_modules/typescript/lib"
+}

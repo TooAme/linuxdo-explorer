@@ -1,0 +1,151 @@
+{
+  "name": "linuxdo-explorer",
+  "displayName": "Linux.do Explorer",
+  "description": "Surfing the Linux.do in Visual Studio Code",
+  "version": "1.0.6",
+  "publisher": "TooAme",
+  "icon": "images/logo.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:linuxdoExplorer"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "linuxdoExplorer",
+          "name": "Linux.do",
+          "contextualTitle": "Linux.do"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "linuxdo.refresh",
+        "title": "刷新",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "linuxdo.login",
+        "title": "登录",
+        "icon": "$(sign-in)"
+      },
+      {
+        "command": "linuxdo.logout",
+        "title": "退出登录",
+        "icon": "$(sign-out)"
+      },
+      {
+        "command": "linuxdo.openInBrowser",
+        "title": "在浏览器中打开",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "linuxdo.replyToTopic",
+        "title": "回复话题",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "linuxdo.likeTopic",
+        "title": "点赞",
+        "icon": "$(heart)"
+      },
+      {
+        "command": "linuxdo.refreshNode",
+        "title": "刷新",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "linuxdo.loadMore",
+        "title": "加载更多",
+        "icon": "$(chevron-down)"
+      },
+      {
+        "command": "linuxdo.openNotification",
+        "title": "打开通知",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "linuxdo.markNotificationAsRead",
+        "title": "标记为已读",
+        "icon": "$(check)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "linuxdo.refresh",
+          "when": "view == linuxdoExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "linuxdo.login",
+          "when": "view == linuxdoExplorer",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "linuxdo.openInBrowser",
+          "when": "view == linuxdoExplorer && viewItem == topic",
+          "group": "inline"
+        },
+        {
+          "command": "linuxdo.refreshNode",
+          "when": "view == linuxdoExplorer && viewItem == topic",
+          "group": "inline"
+        },
+        {
+          "command": "linuxdo.refreshNode",
+          "when": "view == linuxdoExplorer && viewItem == category",
+          "group": "inline"
+        },
+        {
+          "command": "linuxdo.replyToTopic",
+          "when": "view == linuxdoExplorer && viewItem == topic",
+          "group": "navigation@1"
+        },
+        {
+          "command": "linuxdo.likeTopic",
+          "when": "view == linuxdoExplorer && viewItem == topic",
+          "group": "navigation@2"
+        },
+        {
+          "command": "linuxdo.replyToTopic",
+          "when": "view == linuxdoExplorer && viewItem == post",
+          "group": "navigation@1"
+        },
+        {
+          "command": "linuxdo.likeTopic",
+          "when": "view == linuxdoExplorer && viewItem == post",
+          "group": "navigation@2"
+        },
+        {
+          "command": "linuxdo.markNotificationAsRead",
+          "when": "view == linuxdoExplorer && viewItem == notification",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {}
+}
