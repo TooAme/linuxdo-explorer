@@ -2,7 +2,7 @@
   "name": "linuxdo-explorer",
   "displayName": "Linux.do Explorer",
   "description": "Surfing the Linux.do in Visual Studio Code",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "publisher": "TooAme",
   "icon": "images/logo.png",
   "engines": {

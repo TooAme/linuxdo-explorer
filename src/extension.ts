@@ -13,9 +13,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
   const cookieStorage = new CookieStorage(context.secrets);
 
-  const apiClient = new DiscourseApiClient(async () => {
-    return await cookieStorage.getCookie();
-  });
+  const apiClient = new DiscourseApiClient(
+    async () => {
+      return await cookieStorage.getCookie();
+    },
+    async () => {
+      return await cookieStorage.getUserAgent();
+    }
+  );
 
   const authManager = new AuthenticationManager(context, cookieStorage, apiClient);
 

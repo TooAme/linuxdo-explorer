@@ -30,7 +30,7 @@ export class AuthenticationManager {
         console.log('[AuthenticationManager] 收到webview消息:', message.command);
         switch (message.command) {
           case 'submitCookie':
-            await this.handleCookieSubmit(message.cookie, panel);
+            await this.handleCookieSubmit(message.cookie, message.userAgent, panel);
             break;
           case 'openBrowser':
             vscode.env.openExternal(vscode.Uri.parse('https://linux.do'));
@@ -45,24 +45,25 @@ export class AuthenticationManager {
     );
   }
 
-  private async handleCookieSubmit(cookie: string, panel: vscode.WebviewPanel): Promise<void> {
+  private async handleCookieSubmit(cookie: string, userAgent: string, panel: vscode.WebviewPanel): Promise<void> {
     try {
-      console.log('[AuthenticationManager] 开始验证Cookie...');
+      console.log('[AuthenticationManager] 开始验证Cookie和User-Agent...');
       panel.webview.postMessage({ command: 'validating' });
 
-      const isValid = await this.apiClient.validateCookie(cookie);
+      const isValid = await this.apiClient.validateCookie(cookie, userAgent);
 
       if (isValid) {
-        console.log('[AuthenticationManager] Cookie验证成功');
+        console.log('[AuthenticationManager] Cookie和User-Agent验证成功');
         await this.cookieStorage.saveCookie(cookie);
+        await this.cookieStorage.saveUserAgent(userAgent);
         await this.apiClient.refreshCookie();
         vscode.window.showInformationMessage('登录成功!');
         panel.dispose();
         vscode.commands.executeCommand('linuxdo.refresh');
       } else {
-        console.error('[AuthenticationManager] Cookie验证失败');
+        console.error('[AuthenticationManager] Cookie或User-Agent验证失败');
         panel.webview.postMessage({ command: 'validationFailed' });
-        vscode.window.showErrorMessage('Cookie无效，请重新获取');
+        vscode.window.showErrorMessage('Cookie或User-Agent无效，请重新获取');
       }
     } catch (error: any) {
       console.error('[AuthenticationManager] Cookie验证异常:', error);
@@ -221,7 +222,7 @@ export class AuthenticationManager {
           <h1>Linux.do 登录</h1>
 
           <div class="instructions">
-            <h3>如何获取 Cookie</h3>
+            <h3>如何获取 Cookie 和 User-Agent</h3>
             <ol>
               <li>点击下方按钮在浏览器中打开 linux.do 并登录账号</li>
               <li>登录成功后，按 F12 打开浏览器开发者工具</li>
@@ -229,8 +230,8 @@ export class AuthenticationManager {
               <li>刷新页面 F5 或 Ctrl+R</li>
               <li>点击左侧任意一个请求</li>
               <li>在右侧找到 请求标头 (Request Headers)</li>
-              <li>找到 Cookie: 字段，复制其完整内容</li>
-              <li>将复制的 Cookie 粘贴到下方输入框中</li>
+              <li>找到 <code>Cookie:</code> 字段，复制其完整内容到下方第一个输入框</li>
+              <li>找到 <code>User-Agent:</code> 字段，复制其完整内容到下方第二个输入框</li>
             </ol>
           </div>
 
@@ -248,6 +249,15 @@ export class AuthenticationManager {
             ></textarea>
           </div>
 
+          <div class="input-group">
+            <label for="userAgentInput">User-Agent 内容</label>
+            <textarea
+              id="userAgentInput"
+              placeholder="在此粘贴 User-Agent 内容..."
+              style="min-height: 60px;"
+            ></textarea>
+          </div>
+
           <div class="button-group">
             <button id="submitBtn">
               提交登录
@@ -257,7 +267,8 @@ export class AuthenticationManager {
           <div id="status" class="status"></div>
 
           <div class="tip">
-            提示：Cookie 包含您的登录凭证，请妥善保管，不要分享给他人。
+            提示：Cookie 和 User-Agent 包含您的登录凭证和浏览器指纹信息，请妥善保管，不要分享给他人。<br>
+            使用相同的 Cookie 和 User-Agent 可以避免被 Cloudflare 拦截。
           </div>
         </div>
 
@@ -270,20 +281,28 @@ export class AuthenticationManager {
 
           function submitCookie() {
             const cookieInput = document.getElementById('cookieInput');
+            const userAgentInput = document.getElementById('userAgentInput');
             const submitBtn = document.getElementById('submitBtn');
             const cookie = cookieInput.value.trim();
+            const userAgent = userAgentInput.value.trim();
 
             if (!cookie) {
               showStatus('请先输入 Cookie 内容', 'error');
               return;
             }
 
+            if (!userAgent) {
+              showStatus('请先输入 User-Agent 内容', 'error');
+              return;
+            }
+
             submitBtn.disabled = true;
-            showStatus('正在验证 Cookie...', 'validating');
+            showStatus('正在验证 Cookie 和 User-Agent...', 'validating');
 
             vscode.postMessage({
               command: 'submitCookie',
-              cookie: cookie
+              cookie: cookie,
+              userAgent: userAgent
             });
           }
 
@@ -299,11 +318,11 @@ export class AuthenticationManager {
 
             switch (message.command) {
               case 'validating':
-                showStatus('正在验证 Cookie...', 'validating');
+                showStatus('正在验证 Cookie 和 User-Agent...', 'validating');
                 break;
               case 'validationFailed':
                 if (submitBtn) submitBtn.disabled = false;
-                showStatus('Cookie 验证失败，请检查是否正确复制', 'error');
+                showStatus('Cookie 或 User-Agent 验证失败，请检查是否正确复制', 'error');
                 break;
             }
           });

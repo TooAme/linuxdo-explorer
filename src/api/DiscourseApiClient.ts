@@ -14,10 +14,14 @@ import type {
 
 export class DiscourseApiClient {
   private cookie: string = '';
+  private userAgent: string = '';
   private cookieInitialized: boolean = false;
   private csrfToken: string = '';
 
-  constructor(private getCookieFunc: () => Promise<string>) {
+  constructor(
+    private getCookieFunc: () => Promise<string>,
+    private getUserAgentFunc: () => Promise<string>
+  ) {
     // 不在构造函数中调用异步方法
   }
 
@@ -54,7 +58,7 @@ export class DiscourseApiClient {
         method: 'GET',
         headers: {
           'Cookie': this.cookie,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0',
+          'User-Agent': this.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
           'Accept-Encoding': 'gzip, deflate, br'
@@ -91,10 +95,12 @@ export class DiscourseApiClient {
   private async ensureCookieLoaded(): Promise<void> {
     if (!this.cookieInitialized) {
       this.cookie = await this.getCookieFunc();
+      this.userAgent = await this.getUserAgentFunc();
       this.cookieInitialized = true;
 
       console.log('[DiscourseApiClient] Cookie已加载，长度:', this.cookie.length);
       console.log('[DiscourseApiClient] Cookie内容（前500字符）:', this.cookie.substring(0, 500));
+      console.log('[DiscourseApiClient] User-Agent已加载:', this.userAgent.substring(0, 100));
 
       // 先尝试从 Cookie 中提取
       this.csrfToken = this.extractCsrfToken(this.cookie);
@@ -111,6 +117,7 @@ export class DiscourseApiClient {
 
   async refreshCookie(): Promise<void> {
     this.cookie = await this.getCookieFunc();
+    this.userAgent = await this.getUserAgentFunc();
     this.cookieInitialized = true;
 
     // 重新提取 CSRF Token
@@ -119,7 +126,7 @@ export class DiscourseApiClient {
       this.csrfToken = await this.fetchCsrfTokenFromHomepage();
     }
 
-    console.log('[DiscourseApiClient] Cookie已刷新');
+    console.log('[DiscourseApiClient] Cookie和User-Agent已刷新');
     console.log('[DiscourseApiClient] CSRF Token:', this.csrfToken ? '已提取' : '未找到');
   }
 
@@ -236,7 +243,7 @@ export class DiscourseApiClient {
     try {
       const headers: Record<string, string> = {
         'Cookie': this.cookie,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0',
+        'User-Agent': this.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
         'Accept-Encoding': 'gzip, deflate, br',
@@ -440,10 +447,11 @@ export class DiscourseApiClient {
     }
   }
 
-  async validateCookie(cookieStr: string): Promise<boolean> {
+  async validateCookie(cookieStr: string, userAgentStr: string): Promise<boolean> {
     try {
-      console.log('[DiscourseApiClient] 开始验证Cookie...');
+      console.log('[DiscourseApiClient] 开始验证Cookie和User-Agent...');
       console.log('[DiscourseApiClient] Cookie原始长度:', cookieStr.length);
+      console.log('[DiscourseApiClient] User-Agent长度:', userAgentStr.length);
 
       // 清理Cookie：移除换行符、多余空格等
       const cleanedCookie = cookieStr
@@ -451,8 +459,15 @@ export class DiscourseApiClient {
         .replace(/\s+/g, ' ')        // 合并多个空格为一个
         .trim();                     // 移除首尾空格
 
+      // 清理User-Agent
+      const cleanedUserAgent = userAgentStr
+        .replace(/\r?\n|\r/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
       console.log('[DiscourseApiClient] Cookie清理后长度:', cleanedCookie.length);
       console.log('[DiscourseApiClient] Cookie前100字符:', cleanedCookie.substring(0, 100));
+      console.log('[DiscourseApiClient] User-Agent:', cleanedUserAgent);
 
       // 先尝试用户信息端点
       let url = `${DISCOURSE_API.BASE_URL}${DISCOURSE_API.ENDPOINTS.USER_INFO}`;
@@ -463,7 +478,7 @@ export class DiscourseApiClient {
         headers: {
           'Cookie': cleanedCookie,
           'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0',
+          'User-Agent': cleanedUserAgent,
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
           'Accept-Encoding': 'gzip, deflate, br',
           'Cache-Control': 'max-age=0',
@@ -498,7 +513,7 @@ export class DiscourseApiClient {
           headers: {
             'Cookie': cleanedCookie,
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0',
+            'User-Agent': cleanedUserAgent,
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
             'Accept-Encoding': 'gzip, deflate, br',
             'Cache-Control': 'max-age=0',
