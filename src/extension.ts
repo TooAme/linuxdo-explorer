@@ -31,7 +31,8 @@ export async function activate(context: vscode.ExtensionContext) {
   const treeDataProvider = new LinuxDoTreeDataProvider(
     categoryService,
     topicService,
-    postService
+    postService,
+    context
   );
 
   const treeView = vscode.window.createTreeView('linuxdoExplorer', {
@@ -39,7 +40,40 @@ export async function activate(context: vscode.ExtensionContext) {
     showCollapseAll: true
   });
 
+  let autoRefreshTimer: NodeJS.Timeout | undefined;
+
+  async function applyAutoRefreshFromSettings() {
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = undefined;
+    }
+
+    const settings = context.globalState.get<{
+      showImages?: boolean;
+      showEmoji?: boolean;
+      autoRefreshMinutes?: number;
+      ignoreLineBreaks?: boolean;
+      compactMode?: boolean;
+      // å…¼å®¹æ—§ç‰ˆæœ¬çš„ ignoreSpaces
+      ignoreSpaces?: boolean;
+      topicFontSize?: string;
+    }>('linuxdo-settings') ?? {};
+
+    const minutes = settings.autoRefreshMinutes ?? 0;
+    if (!minutes || minutes <= 0) {
+      return;
+    }
+
+    const intervalMs = minutes * 60 * 1000;
+    autoRefreshTimer = setInterval(() => {
+      treeDataProvider.refresh();
+    }, intervalMs);
+  }
+
   context.subscriptions.push(
+    vscode.commands.registerCommand('linuxdo.updateAutoRefresh', async () => {
+      await applyAutoRefreshFromSettings();
+    }),
     vscode.commands.registerCommand('linuxdo.refresh', () => {
       vscode.window.showInformationMessage('正在刷新...');
       treeDataProvider.refresh();
@@ -69,6 +103,15 @@ export async function activate(context: vscode.ExtensionContext) {
         const url = `https://linux.do/t/${node.data.topicId}`;
         vscode.env.openExternal(vscode.Uri.parse(url));
       }
+    }),
+
+    vscode.commands.registerCommand('linuxdo.openTopicPreview', async (node: TreeItemNode) => {
+      if (!node.data.topicId) {
+        vscode.window.showErrorMessage('无法获取话题 ID');
+        return;
+      }
+
+      await treeDataProvider.openTopicPreview(node.data.topicId, node.data.label);
     }),
 
     vscode.commands.registerCommand('linuxdo.replyToTopic', async (node: TreeItemNode) => {
