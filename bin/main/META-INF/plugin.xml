@@ -1,0 +1,75 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <id>com.linuxdo.explorer</id>
+    <name>Linux.do Explorer</name>
+    <vendor email="tooame@example.com" url="https://github.com/TooAme/linuxdo-explorer">TooAme</vendor>
+
+    <resource-bundle>messages.LinuxDoBundle</resource-bundle>
+
+    <description><![CDATA[
+    <h2>在 IntelliJ IDEA 中浏览 Linux.do 论坛</h2>
+    <p><strong>Linux.do Explorer</strong> 是一个强大的 IntelliJ IDEA 插件，让你在编写代码的同时，能够方便快捷地浏览 Linux.do 论坛的内容。</p>
+    
+    <h3>功能特性</h3>
+    <ul>
+        <li><strong>沉浸式体验</strong>：融入 IDE 原生界面，体验丝滑</li>
+        <li><strong>分类浏览</strong>：支持浏览论坛的各种分类和话题</li>
+        <li><strong>话题展开</strong>：直接在侧边栏展开话题，查看所有回复</li>
+        <li><strong>一键刷新</strong>：实时获取最新内容</li>
+        <li><strong>快速访问</strong>：支持一键在浏览器中打开话题</li>
+    </ul>
+    ]]></description>
+
+    <change-notes><![CDATA[
+    <h3>v1.0.0</h3>
+    <ul>
+        <li>初始版本发布</li>
+        <li>支持浏览论坛分类和话题</li>
+        <li>支持话题预览</li>
+        <li>支持通知显示</li>
+    </ul>
+    ]]></change-notes>
+
+    <!-- Product and plugin compatibility requirements -->
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Tool Window -->
+        <toolWindow id="Linux.do"
+                    secondary="true"
+                    anchor="left"
+                    icon="/icons/linuxdo.svg"
+                    factoryClass="com.linuxdo.explorer.toolwindow.LinuxDoToolWindowFactory"/>
+
+        <!-- Settings -->
+        <applicationConfigurable
+                parentId="tools"
+                instance="com.linuxdo.explorer.settings.LinuxDoSettingsConfigurable"
+                id="com.linuxdo.explorer.settings"
+                displayName="Linux.do Explorer"/>
+
+        <!-- Persistent State -->
+        <applicationService
+                serviceImplementation="com.linuxdo.explorer.settings.LinuxDoSettings"/>
+
+        <!-- Notification Group -->
+        <notificationGroup id="Linux.do Explorer"
+                           displayType="BALLOON"
+                           toolWindowId="Linux.do"/>
+    </extensions>
+
+    <actions>
+        <group id="LinuxDoExplorer.ToolbarActions" text="group.linuxdo.actions">
+            <action id="LinuxDoExplorer.Refresh"
+                    class="com.linuxdo.explorer.actions.RefreshAction"
+                    text="toolbar.refresh"
+                    description="toolbar.refresh.tooltip"
+                    icon="AllIcons.Actions.Refresh"/>
+            <action id="LinuxDoExplorer.Settings"
+                    class="com.linuxdo.explorer.actions.OpenSettingsAction"
+                    text="toolbar.settings"
+                    description="toolbar.settings.tooltip"
+                    icon="AllIcons.General.Settings"/>
+        </group>
+    </actions>
+</idea-plugin>

@@ -1,0 +1,15 @@
+# IntelliJ IDEA Plugin Build Artifacts
+build/
+out/
+.gradle/
+
+# IDE
+.idea/
+*.iml
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
