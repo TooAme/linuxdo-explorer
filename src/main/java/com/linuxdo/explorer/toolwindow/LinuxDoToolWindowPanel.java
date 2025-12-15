@@ -553,8 +553,34 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         JPopupMenu popup = new JPopupMenu();
         
         switch (data.type) {
+            case CATEGORY:
+                // 分类菜单 - 刷新分类
+                JMenuItem refreshCategoryItem = new JMenuItem(LinuxDoBundle.message("menu.refreshCategory"));
+                refreshCategoryItem.addActionListener(ev -> {
+                    refreshCategoryNode(node, data.id);
+                });
+                popup.add(refreshCategoryItem);
+                break;
+                
+            case ALL_TOPICS:
+                // 全部话题菜单 - 刷新
+                JMenuItem refreshAllTopicsItem = new JMenuItem(LinuxDoBundle.message("menu.refreshCategory"));
+                refreshAllTopicsItem.addActionListener(ev -> {
+                    refreshAllTopicsNode(node);
+                });
+                popup.add(refreshAllTopicsItem);
+                break;
+                
             case TOPIC:
                 // 话题菜单
+                JMenuItem refreshTopicItem = new JMenuItem(LinuxDoBundle.message("menu.refreshTopic"));
+                refreshTopicItem.addActionListener(ev -> {
+                    refreshTopicNode(node, data.id);
+                });
+                popup.add(refreshTopicItem);
+                
+                popup.addSeparator();
+                
                 JMenuItem summarizeItem = new JMenuItem(LinuxDoBundle.message("menu.summarize"));
                 summarizeItem.addActionListener(ev -> {
                     // 先加载话题内容，然后执行总结
@@ -617,6 +643,80 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         
         popup.show(e.getComponent(), e.getX(), e.getY());
     }
+    
+    /**
+     * 刷新单个分类节点
+     */
+    private void refreshCategoryNode(DefaultMutableTreeNode node, int categoryId) {
+        // 记录当前是否展开
+        TreePath path = new TreePath(node.getPath());
+        boolean wasExpanded = tree.isExpanded(path);
+        
+        // 移除已加载标记，清空子节点
+        loadedNodes.remove(node);
+        node.removeAllChildren();
+        treeModel.nodeStructureChanged(node);
+        
+        // 重新加载
+        loadCategoryTopics(node, categoryId);
+        
+        // 保持展开状态
+        if (wasExpanded) {
+            ApplicationManager.getApplication().invokeLater(() -> {
+                tree.expandPath(path);
+            });
+        }
+    }
+    
+    /**
+     * 刷新全部话题节点
+     */
+    private void refreshAllTopicsNode(DefaultMutableTreeNode node) {
+        // 记录当前是否展开
+        TreePath path = new TreePath(node.getPath());
+        boolean wasExpanded = tree.isExpanded(path);
+        
+        // 移除已加载标记，清空子节点
+        loadedNodes.remove(node);
+        node.removeAllChildren();
+        treeModel.nodeStructureChanged(node);
+        
+        // 重新加载
+        loadLatestTopics(node);
+        
+        // 保持展开状态
+        if (wasExpanded) {
+            ApplicationManager.getApplication().invokeLater(() -> {
+                tree.expandPath(path);
+            });
+        }
+    }
+    
+    /**
+     * 刷新单个话题节点（重新加载帖子）
+     */
+    private void refreshTopicNode(DefaultMutableTreeNode node, int topicId) {
+        // 记录当前是否展开
+        TreePath path = new TreePath(node.getPath());
+        boolean wasExpanded = tree.isExpanded(path);
+        
+        // 移除已加载标记，清空子节点，清除缓存
+        loadedNodes.remove(node);
+        topicDataCache.remove(topicId);
+        node.removeAllChildren();
+        treeModel.nodeStructureChanged(node);
+        
+        // 重新加载
+        loadTopicPosts(node, topicId);
+        
+        // 保持展开状态
+        if (wasExpanded) {
+            ApplicationManager.getApplication().invokeLater(() -> {
+                tree.expandPath(path);
+            });
+        }
+    }
+
     
     /**
      * 复制文本到剪贴板
