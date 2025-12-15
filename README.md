@@ -1,10 +1,12 @@
-# Linux.do Explorer - IntelliJ IDEA 插件
 
-![icon](../images/logo.png)
+![icon](https://github.com/user-attachments/assets/0ba29abb-6dee-43be-b632-5a7b12e8baae#pic_center)
+
+# Linux.do Explorer
 
 **在 IntelliJ IDEA 中浏览 Linux.do 论坛**
 
 [![License](https://img.shields.io/badge/license-GPL3.0-green?style=flat-square)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/TooAme/linuxdo-explorer?style=flat-square&logo=github)](https://github.com/TooAme/linuxdo-explorer)
 [![JetBrains](https://img.shields.io/badge/JetBrains-2023.3+-blue?style=flat-square&logo=jetbrains)](https://www.jetbrains.com/)
 
 ---
