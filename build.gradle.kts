@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.linuxdo"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -32,8 +32,8 @@ tasks {
     }
 
     patchPluginXml {
-        sinceBuild.set("241")
-        untilBuild.set("251.*")
+        sinceBuild.set("232")
+        untilBuild.set("253.*")
     }
 
     signPlugin {

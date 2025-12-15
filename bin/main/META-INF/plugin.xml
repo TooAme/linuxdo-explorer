@@ -21,6 +21,12 @@
     ]]></description>
 
     <change-notes><![CDATA[
+    <h3>v1.0.1</h3>
+    <ul>
+        <li>Expanded supported IDE versions (2023.2 - 2025.3)</li>
+        <li>Added plugin icon</li>
+    </ul>
+    
     <h3>v1.0.0</h3>
     <ul>
         <li>Initial release</li>
@@ -35,7 +41,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Tool Window -->
-        <toolWindow id="Linux.do Explorer"
+        <toolWindow id="Linux.do"
                     secondary="true"
                     anchor="left"
                     icon="/icons/linuxdo.svg"
@@ -55,7 +61,7 @@
         <!-- Notification Group -->
         <notificationGroup id="Linux.do Explorer"
                            displayType="BALLOON"
-                           toolWindowId="Linux.do Explorer"/>
+                           toolWindowId="Linux.do"/>
     </extensions>
 
     <actions>
