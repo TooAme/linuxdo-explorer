@@ -21,6 +21,17 @@
     ]]></description>
 
     <change-notes><![CDATA[
+    <h3>v1.0.2</h3>
+    <ul>
+        <li>Added "Load More" button for topics and replies pagination</li>
+        <li>Added search bar in toolbar to search topics</li>
+        <li>Added notification display settings (off/unread only/all)</li>
+        <li>Added auto-refresh on settings change</li>
+        <li>Topics and replies loading limit now configurable (5-30 for topics, 5-20 for replies)</li>
+        <li>Single-click to load more content</li>
+        <li>Fixed deprecated URL constructor warning</li>
+    </ul>
+    
     <h3>v1.0.1</h3>
     <ul>
         <li>Expanded supported IDE versions (2023.2 - 2025.3)</li>

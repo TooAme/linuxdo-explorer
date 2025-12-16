@@ -200,6 +200,34 @@ public class LinuxDoSettings implements PersistentStateComponent<LinuxDoSettings
         state.disguiseMode = mode;
     }
 
+    // ============ 加载数量设置 ============
+
+    public int getTopicsPerLoad() {
+        return state.topicsPerLoad;
+    }
+
+    public void setTopicsPerLoad(int count) {
+        state.topicsPerLoad = Math.max(5, Math.min(30, count));
+    }
+
+    public int getRepliesPerLoad() {
+        return state.repliesPerLoad;
+    }
+
+    public void setRepliesPerLoad(int count) {
+        state.repliesPerLoad = Math.max(5, Math.min(20, count));
+    }
+
+    // ============ 通知设置 ============
+
+    public String getNotificationMode() {
+        return state.notificationMode;
+    }
+
+    public void setNotificationMode(String mode) {
+        state.notificationMode = mode;
+    }
+
     /**
      * 设置状态类
      */
@@ -217,5 +245,10 @@ public class LinuxDoSettings implements PersistentStateComponent<LinuxDoSettings
         public String openaiModel = "glm-4.6v-flash";
         // 伪装模式：off=关闭, hide=隐藏内容, english=英文填充
         public String disguiseMode = "english";
+        // 加载数量设置
+        public int topicsPerLoad = 20;
+        public int repliesPerLoad = 20;
+        // 通知显示模式：off=关闭, unread=仅未读, all=全部
+        public String notificationMode = "unread";
     }
 }

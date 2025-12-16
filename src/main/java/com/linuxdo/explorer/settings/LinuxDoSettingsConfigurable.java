@@ -31,6 +31,11 @@ public class LinuxDoSettingsConfigurable implements Configurable {
     private JTextField openaiUrlField;
     private JPasswordField openaiKeyField;
     private JTextField openaiModelField;
+    // 加载数量设置
+    private JSpinner topicsPerLoadSpinner;
+    private JSpinner repliesPerLoadSpinner;
+    // 通知设置
+    private JComboBox<String> notificationModeComboBox;
 
     @Override
     public @NlsContexts.ConfigurableName String getDisplayName() {
@@ -127,6 +132,37 @@ public class LinuxDoSettingsConfigurable implements Configurable {
         disguisePanel.add(disguiseModeComboBox);
         disguisePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
         panel.add(disguisePanel);
+        panel.add(Box.createVerticalStrut(5));
+
+        // 单次加载话题数
+        JPanel topicsPerLoadPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        topicsPerLoadPanel.add(new JLabel(LinuxDoBundle.message("settings.topicsPerLoad")));
+        topicsPerLoadSpinner = new JSpinner(new SpinnerNumberModel(20, 5, 30, 5));
+        topicsPerLoadPanel.add(topicsPerLoadSpinner);
+        topicsPerLoadPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(topicsPerLoadPanel);
+        panel.add(Box.createVerticalStrut(5));
+
+        // 单次加载回复数
+        JPanel repliesPerLoadPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        repliesPerLoadPanel.add(new JLabel(LinuxDoBundle.message("settings.repliesPerLoad")));
+        repliesPerLoadSpinner = new JSpinner(new SpinnerNumberModel(20, 5, 20, 5));
+        repliesPerLoadPanel.add(repliesPerLoadSpinner);
+        repliesPerLoadPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(repliesPerLoadPanel);
+        panel.add(Box.createVerticalStrut(5));
+
+        // 通知显示模式
+        JPanel notificationModePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        notificationModePanel.add(new JLabel(LinuxDoBundle.message("settings.notificationMode")));
+        notificationModeComboBox = new JComboBox<>(new String[]{
+                LinuxDoBundle.message("settings.notificationMode.off"),
+                LinuxDoBundle.message("settings.notificationMode.unread"),
+                LinuxDoBundle.message("settings.notificationMode.all")
+        });
+        notificationModePanel.add(notificationModeComboBox);
+        notificationModePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(notificationModePanel);
 
         return panel;
     }
@@ -284,6 +320,16 @@ public class LinuxDoSettingsConfigurable implements Configurable {
         if ("off".equals(disguiseMode)) disguiseModeComboBox.setSelectedIndex(0);
         else if ("hide".equals(disguiseMode)) disguiseModeComboBox.setSelectedIndex(1);
         else disguiseModeComboBox.setSelectedIndex(2); // english (默认)
+        
+        // 设置加载数量
+        topicsPerLoadSpinner.setValue(settings.getTopicsPerLoad());
+        repliesPerLoadSpinner.setValue(settings.getRepliesPerLoad());
+        
+        // 设置通知显示模式
+        String notificationMode = settings.getNotificationMode();
+        if ("off".equals(notificationMode)) notificationModeComboBox.setSelectedIndex(0);
+        else if ("unread".equals(notificationMode)) notificationModeComboBox.setSelectedIndex(1);
+        else notificationModeComboBox.setSelectedIndex(2); // all
     }
 
     @Override
@@ -303,7 +349,10 @@ public class LinuxDoSettingsConfigurable implements Configurable {
                 !openaiUrlField.getText().equals(settings.getOpenaiUrl()) ||
                 !new String(openaiKeyField.getPassword()).equals(settings.getOpenaiKey()) ||
                 !openaiModelField.getText().equals(settings.getOpenaiModel()) ||
-                !getDisguiseMode().equals(settings.getDisguiseMode());
+                !getDisguiseMode().equals(settings.getDisguiseMode()) ||
+                (Integer) topicsPerLoadSpinner.getValue() != settings.getTopicsPerLoad() ||
+                (Integer) repliesPerLoadSpinner.getValue() != settings.getRepliesPerLoad() ||
+                !getNotificationMode().equals(settings.getNotificationMode());
     }
 
     @Override
@@ -324,6 +373,15 @@ public class LinuxDoSettingsConfigurable implements Configurable {
         settings.setOpenaiKey(new String(openaiKeyField.getPassword()).trim());
         settings.setOpenaiModel(openaiModelField.getText().trim());
         settings.setDisguiseMode(getDisguiseMode());
+        settings.setTopicsPerLoad((Integer) topicsPerLoadSpinner.getValue());
+        settings.setRepliesPerLoad((Integer) repliesPerLoadSpinner.getValue());
+        settings.setNotificationMode(getNotificationMode());
+        
+        // 发布设置变更消息，触发工具窗口刷新
+        com.intellij.openapi.application.ApplicationManager.getApplication()
+                .getMessageBus()
+                .syncPublisher(SettingsChangeNotifier.TOPIC)
+                .settingsChanged();
     }
 
     @Override
@@ -357,6 +415,15 @@ public class LinuxDoSettingsConfigurable implements Configurable {
             case 0: return "off";
             case 1: return "hide";
             default: return "english";
+        }
+    }
+    
+    private String getNotificationMode() {
+        int index = notificationModeComboBox.getSelectedIndex();
+        switch (index) {
+            case 0: return "off";
+            case 1: return "unread";
+            default: return "all";
         }
     }
 }

@@ -8,19 +8,26 @@ import com.linuxdo.explorer.settings.LinuxDoSettings;
 import com.linuxdo.explorer.util.LinuxDoBundle;
 import org.cef.browser.CefBrowser;
 import org.cef.browser.CefFrame;
+import org.cef.callback.CefCookieVisitor;
 import org.cef.handler.CefLoadHandlerAdapter;
 import org.cef.handler.CefRequestHandlerAdapter;
 import org.cef.handler.CefResourceRequestHandler;
 import org.cef.handler.CefResourceRequestHandlerAdapter;
 import org.cef.misc.BoolRef;
+import org.cef.network.CefCookie;
+import org.cef.network.CefCookieManager;
 import org.cef.network.CefRequest;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 /**
@@ -156,6 +163,73 @@ public class LoginBrowserDialog extends DialogWrapper {
         }
     }
 
+    /**
+     * 使用 CookieManager 获取浏览器中存储的所有 Cookie
+     * 这比从请求头中获取更完整可靠
+     */
+    private String getAllCookiesFromBrowser() {
+        try {
+            CefCookieManager cookieManager = CefCookieManager.getGlobalManager();
+            if (cookieManager == null) {
+                System.err.println("CookieManager is null");
+                return capturedCookie; // 回退到之前捕获的 cookie
+            }
+
+            List<CefCookie> cookies = new ArrayList<>();
+            CountDownLatch latch = new CountDownLatch(1);
+
+            boolean success = cookieManager.visitUrlCookies(
+                "https://linux.do",
+                true,
+                new CefCookieVisitor() {
+                    @Override
+                    public boolean visit(CefCookie cookie, int count, int total, BoolRef delete) {
+                        if (cookie != null && cookie.domain != null && 
+                            cookie.domain.contains("linux.do")) {
+                            cookies.add(cookie);
+                        }
+                        // 如果是最后一个 cookie，通知完成
+                        if (count == total - 1) {
+                            latch.countDown();
+                        }
+                        return true; // 继续访问
+                    }
+                }
+            );
+
+            if (!success) {
+                System.err.println("Failed to visit cookies");
+                return capturedCookie;
+            }
+
+            // 等待 Cookie 访问完成（最多3秒）
+            boolean completed = latch.await(3, TimeUnit.SECONDS);
+            if (!completed && cookies.isEmpty()) {
+                System.err.println("Cookie visit timeout");
+                return capturedCookie;
+            }
+
+            // 构建 Cookie 字符串
+            if (!cookies.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < cookies.size(); i++) {
+                    CefCookie cookie = cookies.get(i);
+                    if (i > 0) {
+                        sb.append("; ");
+                    }
+                    sb.append(cookie.name).append("=").append(cookie.value);
+                }
+                String fullCookie = sb.toString();
+                System.out.println("Got " + cookies.size() + " cookies from CookieManager");
+                return fullCookie;
+            }
+        } catch (Exception e) {
+            System.err.println("Error getting cookies from CookieManager: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return capturedCookie;
+    }
+
     private void showHelp() {
         String helpMessage = LinuxDoBundle.message("login.helpMessage");
         JOptionPane.showMessageDialog(getContentPanel(), helpMessage, LinuxDoBundle.message("login.help"), JOptionPane.INFORMATION_MESSAGE);
@@ -164,6 +238,13 @@ public class LoginBrowserDialog extends DialogWrapper {
     @Override
     protected void doOKAction() {
         if (credentialsCaptured && !capturedCookie.isEmpty()) {
+            // 尝试使用 CookieManager 获取完整的 Cookie
+            String fullCookie = getAllCookiesFromBrowser();
+            if (fullCookie != null && !fullCookie.isEmpty()) {
+                capturedCookie = fullCookie;
+                System.out.println("Using full cookie from CookieManager, length: " + fullCookie.length());
+            }
+            
             // 保存凭证到设置
             LinuxDoSettings settings = LinuxDoSettings.getInstance();
             settings.setCookie(capturedCookie);
@@ -175,6 +256,9 @@ public class LoginBrowserDialog extends DialogWrapper {
             if (onCredentialsCaptured != null) {
                 onCredentialsCaptured.accept(capturedCookie, capturedUserAgent);
             }
+            
+            System.out.println("Cookie saved, length: " + capturedCookie.length());
+            System.out.println("User-Agent saved: " + capturedUserAgent);
         }
         super.doOKAction();
     }

@@ -24,6 +24,7 @@ import com.linuxdo.explorer.api.DiscourseApiClient;
 import com.linuxdo.explorer.model.*;
 import com.linuxdo.explorer.settings.LinuxDoSettings;
 import com.linuxdo.explorer.settings.LinuxDoSettingsConfigurable;
+import com.linuxdo.explorer.settings.SettingsChangeNotifier;
 import com.linuxdo.explorer.ui.TopicPreviewPanel;
 import com.linuxdo.explorer.util.LinuxDoBundle;
 import org.jetbrains.annotations.NotNull;
@@ -56,6 +57,15 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
     private final Set<Integer> readNotificationIds = new HashSet<>();
     // 标记已加载子节点的节点
     private final Set<DefaultMutableTreeNode> loadedNodes = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    // 跟踪每个分类的当前页码 (key: categoryId, value: page)
+    private final Map<Integer, Integer> categoryPageMap = new ConcurrentHashMap<>();
+    private int latestTopicsPage = 0;  // 全部话题的当前页码
+    
+    // 搜索相关
+    private JTextField searchField;
+    private DefaultMutableTreeNode searchResultsNode;
+    private String currentSearchQuery = "";
+    private int searchPage = 0;
 
     private Timer autoRefreshTimer;
 
@@ -78,6 +88,7 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                         return data.type == NodeType.POST || 
                                data.type == NodeType.NOTIFICATION || 
                                data.type == NodeType.LOAD_MORE ||
+                               data.type == NodeType.LOAD_MORE_TOPICS ||
                                data.type == NodeType.INFO;
                     }
                 }
@@ -103,7 +114,10 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         tree.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2) {
+                if (e.getClickCount() == 1) {
+                    // 单击处理 - 用于"加载更多"节点
+                    handleSingleClick();
+                } else if (e.getClickCount() == 2) {
                     handleDoubleClick();
                 }
             }
@@ -181,6 +195,17 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         
         // 设置伪装模式监听器
         setupDisguiseMode(scrollPane);
+        
+        // 订阅设置变更消息，自动刷新
+        ApplicationManager.getApplication().getMessageBus()
+                .connect()
+                .subscribe(SettingsChangeNotifier.TOPIC, new SettingsChangeNotifier() {
+                    @Override
+                    public void settingsChanged() {
+                        // 在 EDT 上执行刷新
+                        ApplicationManager.getApplication().invokeLater(() -> refreshData());
+                    }
+                });
     }
     
     // 伪装模式相关变量
@@ -285,7 +310,23 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
 
         ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar("LinuxDoExplorer", group, true);
         toolbar.setTargetComponent(this);
-        return toolbar.getComponent();
+        
+        // 创建包含工具栏和搜索框的面板
+        JPanel toolbarPanel = new JPanel(new BorderLayout());
+        toolbarPanel.add(toolbar.getComponent(), BorderLayout.WEST);
+        
+        // 创建搜索框
+        searchField = new JTextField();
+        searchField.putClientProperty("JTextField.placeholderText", LinuxDoBundle.message("search.placeholder"));
+        searchField.addActionListener(e -> performSearch(searchField.getText().trim()));
+        searchField.setPreferredSize(new Dimension(150, 24));
+        
+        JPanel searchPanel = new JPanel(new BorderLayout());
+        searchPanel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        searchPanel.add(searchField, BorderLayout.CENTER);
+        toolbarPanel.add(searchPanel, BorderLayout.CENTER);
+        
+        return toolbarPanel;
     }
 
     private void refreshData() {
@@ -316,14 +357,26 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                     ApplicationManager.getApplication().invokeLater(() -> {
                         rootNode.removeAllChildren();
 
-                        // 添加未读通知
-                        for (com.linuxdo.explorer.model.Notification notification : notifications) {
-                            if (!notification.isRead() && !readNotificationIds.contains(notification.getId())) {
-                                DefaultMutableTreeNode notifNode = new DefaultMutableTreeNode(
-                                        new TreeNodeData(NodeType.NOTIFICATION, notification.getId(),
-                                                notification.getDisplayText(), notification.getUrl())
-                                );
-                                rootNode.add(notifNode);
+                        // 根据设置添加通知
+                        String notificationMode = LinuxDoSettings.getInstance().getNotificationMode();
+                        if (!"off".equals(notificationMode)) {
+                            for (com.linuxdo.explorer.model.Notification notification : notifications) {
+                                boolean shouldShow = false;
+                                if ("all".equals(notificationMode)) {
+                                    // 显示全部（排除已在本地标记为已读的）
+                                    shouldShow = !readNotificationIds.contains(notification.getId());
+                                } else if ("unread".equals(notificationMode)) {
+                                    // 仅显示未读
+                                    shouldShow = !notification.isRead() && !readNotificationIds.contains(notification.getId());
+                                }
+                                
+                                if (shouldShow) {
+                                    DefaultMutableTreeNode notifNode = new DefaultMutableTreeNode(
+                                            new TreeNodeData(NodeType.NOTIFICATION, notification.getId(),
+                                                    notification.getDisplayText(), notification.getUrl())
+                                    );
+                                    rootNode.add(notifNode);
+                                }
                             }
                         }
 
@@ -354,12 +407,17 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
     }
 
     private void loadCategoryTopics(DefaultMutableTreeNode parentNode, int categoryId) {
+        // 重置页码
+        categoryPageMap.put(categoryId, 0);
+        
         // 添加加载中提示
         DefaultMutableTreeNode loadingNode = new DefaultMutableTreeNode(
                 new TreeNodeData(NodeType.INFO, 0, LinuxDoBundle.message("node.loading"), "")
         );
         parentNode.add(loadingNode);
         treeModel.nodeStructureChanged(parentNode);
+
+        int topicsPerLoad = LinuxDoSettings.getInstance().getTopicsPerLoad();
 
         ProgressManager.getInstance().run(new Task.Backgroundable(project, LinuxDoBundle.message("progress.loadTopics"), false) {
             @Override
@@ -384,6 +442,17 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                                 );
                                 parentNode.add(topicNode);
                             }
+                            
+                            // 只要有话题返回，就假设可能还有更多
+                            // API 分页大小通常是固定的（约30个），与用户设置无关
+                            if (topics.size() > 0) {
+                                // 添加"加载更多话题"节点，id 存储 categoryId
+                                DefaultMutableTreeNode loadMoreNode = new DefaultMutableTreeNode(
+                                        new TreeNodeData(NodeType.LOAD_MORE_TOPICS, categoryId, 
+                                                LinuxDoBundle.message("node.loadMore"), "")
+                                );
+                                parentNode.add(loadMoreNode);
+                            }
                         }
                         
                         loadedNodes.add(parentNode);
@@ -405,12 +474,17 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
     }
 
     private void loadLatestTopics(DefaultMutableTreeNode parentNode) {
+        // 重置页码
+        latestTopicsPage = 0;
+        
         // 添加加载中提示
         DefaultMutableTreeNode loadingNode = new DefaultMutableTreeNode(
                 new TreeNodeData(NodeType.INFO, 0, LinuxDoBundle.message("node.loading"), "")
         );
         parentNode.add(loadingNode);
         treeModel.nodeStructureChanged(parentNode);
+
+        int topicsPerLoad = LinuxDoSettings.getInstance().getTopicsPerLoad();
 
         ProgressManager.getInstance().run(new Task.Backgroundable(project, LinuxDoBundle.message("progress.loadLatest"), false) {
             @Override
@@ -434,6 +508,16 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                                                 topic.getUrl())
                                 );
                                 parentNode.add(topicNode);
+                            }
+                            
+                            // 只要有话题返回，就假设可能还有更多
+                            if (topics.size() > 0) {
+                                // 添加"加载更多话题"节点，id = -1 表示全部话题
+                                DefaultMutableTreeNode loadMoreNode = new DefaultMutableTreeNode(
+                                        new TreeNodeData(NodeType.LOAD_MORE_TOPICS, -1, 
+                                                LinuxDoBundle.message("node.loadMore"), "")
+                                );
+                                parentNode.add(loadMoreNode);
                             }
                         }
                         
@@ -518,6 +602,31 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         });
     }
 
+    /**
+     * 单击处理 - 处理"加载更多"节点
+     */
+    private void handleSingleClick() {
+        TreePath path = tree.getSelectionPath();
+        if (path == null) return;
+
+        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        Object userObject = node.getUserObject();
+
+        if (userObject instanceof TreeNodeData) {
+            TreeNodeData data = (TreeNodeData) userObject;
+
+            // 单击只处理"加载更多"类型的节点
+            switch (data.type) {
+                case LOAD_MORE:
+                    loadMorePosts(node, data.id);
+                    break;
+                case LOAD_MORE_TOPICS:
+                    loadMoreTopics(node, data.id);
+                    break;
+            }
+        }
+    }
+
     private void handleDoubleClick() {
         TreePath path = tree.getSelectionPath();
         if (path == null) return;
@@ -541,6 +650,9 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                     break;
                 case LOAD_MORE:
                     loadMorePosts(node, data.id);
+                    break;
+                case LOAD_MORE_TOPICS:
+                    loadMoreTopics(node, data.id);
                     break;
             }
         }
@@ -909,7 +1021,8 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
             return;
         }
 
-        List<Integer> nextBatch = unloadedIds.subList(0, Math.min(20, unloadedIds.size()));
+        int repliesPerLoad = LinuxDoSettings.getInstance().getRepliesPerLoad();
+        List<Integer> nextBatch = unloadedIds.subList(0, Math.min(repliesPerLoad, unloadedIds.size()));
 
         ProgressManager.getInstance().run(new Task.Backgroundable(project, LinuxDoBundle.message("progress.loadMore"), false) {
             @Override
@@ -953,6 +1066,228 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                     });
                 } catch (Exception e) {
                     ApplicationManager.getApplication().invokeLater(() -> {
+                        showError(LinuxDoBundle.message("message.loadMoreFailed") + e.getMessage());
+                    });
+                }
+            }
+        });
+    }
+
+    /**
+     * 加载更多话题
+     * @param loadMoreNode 加载更多节点
+     * @param categoryId 分类ID，-1 表示全部话题，-2 表示搜索结果
+     */
+    private void loadMoreTopics(DefaultMutableTreeNode loadMoreNode, int categoryId) {
+        // 如果是搜索结果，使用专门的方法处理
+        if (categoryId == -2) {
+            loadMoreSearchResults(loadMoreNode);
+            return;
+        }
+        
+        DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) loadMoreNode.getParent();
+        if (parentNode == null) return;
+
+        // 获取并递增页码
+        int nextPage;
+        if (categoryId == -1) {
+            // 全部话题
+            nextPage = ++latestTopicsPage;
+        } else {
+            // 分类话题
+            nextPage = categoryPageMap.getOrDefault(categoryId, 0) + 1;
+            categoryPageMap.put(categoryId, nextPage);
+        }
+
+        // 更新节点显示正在加载
+        loadMoreNode.setUserObject(new TreeNodeData(NodeType.INFO, 0, LinuxDoBundle.message("node.loading"), ""));
+        treeModel.nodeChanged(loadMoreNode);
+
+        ProgressManager.getInstance().run(new Task.Backgroundable(project, LinuxDoBundle.message("progress.loadMore"), false) {
+            @Override
+            public void run(@NotNull ProgressIndicator indicator) {
+                try {
+                    List<Topic> topics;
+                    if (categoryId == -1) {
+                        topics = apiClient.getLatestTopics(nextPage);
+                    } else {
+                        topics = apiClient.getCategoryTopics(categoryId, nextPage);
+                    }
+
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        // 移除加载更多节点
+                        int loadMoreIndex = parentNode.getIndex(loadMoreNode);
+                        parentNode.remove(loadMoreNode);
+
+                        if (!topics.isEmpty()) {
+                            // 添加新话题
+                            for (Topic topic : topics) {
+                                DefaultMutableTreeNode topicNode = new DefaultMutableTreeNode(
+                                        new TreeNodeData(NodeType.TOPIC, topic.getId(), topic.getTitle(),
+                                                "V." + topic.getViews() + " R." + topic.getReplyCount(),
+                                                topic.getUrl())
+                                );
+                                parentNode.insert(topicNode, loadMoreIndex++);
+                            }
+
+                            // 只要有话题返回，就假设可能还有更多
+                            if (topics.size() > 0) {
+                                DefaultMutableTreeNode newLoadMore = new DefaultMutableTreeNode(
+                                        new TreeNodeData(NodeType.LOAD_MORE_TOPICS, categoryId, 
+                                                LinuxDoBundle.message("node.loadMore"), "")
+                                );
+                                parentNode.add(newLoadMore);
+                            }
+                        }
+
+                        treeModel.nodeStructureChanged(parentNode);
+                    });
+                } catch (Exception e) {
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        // 恢复加载更多节点
+                        loadMoreNode.setUserObject(new TreeNodeData(NodeType.LOAD_MORE_TOPICS, categoryId, 
+                                LinuxDoBundle.message("node.loadMore"), ""));
+                        treeModel.nodeChanged(loadMoreNode);
+                        showError(LinuxDoBundle.message("message.loadMoreFailed") + e.getMessage());
+                    });
+                }
+            }
+        });
+    }
+
+    /**
+     * 执行搜索
+     */
+    private void performSearch(String query) {
+        if (query.isEmpty()) {
+            // 清除搜索结果，刷新原始数据
+            if (searchResultsNode != null) {
+                rootNode.remove(searchResultsNode);
+                searchResultsNode = null;
+                treeModel.nodeStructureChanged(rootNode);
+            }
+            currentSearchQuery = "";
+            return;
+        }
+
+        currentSearchQuery = query;
+        searchPage = 0;
+
+        // 创建或更新搜索结果节点
+        if (searchResultsNode == null) {
+            searchResultsNode = new DefaultMutableTreeNode(
+                    new TreeNodeData(NodeType.SEARCH_RESULTS, 0, LinuxDoBundle.message("node.searchResults"), "")
+            );
+            rootNode.insert(searchResultsNode, 0);
+        } else {
+            searchResultsNode.removeAllChildren();
+        }
+
+        // 添加加载中提示
+        DefaultMutableTreeNode loadingNode = new DefaultMutableTreeNode(
+                new TreeNodeData(NodeType.INFO, 0, LinuxDoBundle.message("node.loading"), "")
+        );
+        searchResultsNode.add(loadingNode);
+        treeModel.nodeStructureChanged(rootNode);
+        tree.expandPath(new TreePath(new Object[]{rootNode, searchResultsNode}));
+
+        ProgressManager.getInstance().run(new Task.Backgroundable(project, LinuxDoBundle.message("progress.search"), false) {
+            @Override
+            public void run(@NotNull ProgressIndicator indicator) {
+                try {
+                    List<Topic> topics = apiClient.searchTopics(query, 0);
+
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        searchResultsNode.removeAllChildren();
+                        
+                        if (topics.isEmpty()) {
+                            DefaultMutableTreeNode emptyNode = new DefaultMutableTreeNode(
+                                    new TreeNodeData(NodeType.INFO, 0, LinuxDoBundle.message("search.noResults"), "")
+                            );
+                            searchResultsNode.add(emptyNode);
+                        } else {
+                            for (Topic topic : topics) {
+                                DefaultMutableTreeNode topicNode = new DefaultMutableTreeNode(
+                                        new TreeNodeData(NodeType.TOPIC, topic.getId(), topic.getTitle(),
+                                                "V." + topic.getViews() + " R." + topic.getReplyCount(),
+                                                topic.getUrl())
+                                );
+                                searchResultsNode.add(topicNode);
+                            }
+                            
+                            // 如果有结果，添加加载更多
+                            if (topics.size() > 0) {
+                                DefaultMutableTreeNode loadMoreNode = new DefaultMutableTreeNode(
+                                        new TreeNodeData(NodeType.LOAD_MORE_TOPICS, -2, 
+                                                LinuxDoBundle.message("node.loadMore"), "")
+                                );
+                                searchResultsNode.add(loadMoreNode);
+                            }
+                        }
+                        
+                        treeModel.nodeStructureChanged(searchResultsNode);
+                        tree.expandPath(new TreePath(new Object[]{rootNode, searchResultsNode}));
+                    });
+                } catch (Exception e) {
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        searchResultsNode.removeAllChildren();
+                        DefaultMutableTreeNode errorNode = new DefaultMutableTreeNode(
+                                new TreeNodeData(NodeType.INFO, 0, LinuxDoBundle.message("message.loadFailed") + e.getMessage(), "")
+                        );
+                        searchResultsNode.add(errorNode);
+                        treeModel.nodeStructureChanged(searchResultsNode);
+                    });
+                }
+            }
+        });
+    }
+
+    /**
+     * 加载更多搜索结果
+     */
+    private void loadMoreSearchResults(DefaultMutableTreeNode loadMoreNode) {
+        searchPage++;
+
+        loadMoreNode.setUserObject(new TreeNodeData(NodeType.INFO, 0, LinuxDoBundle.message("node.loading"), ""));
+        treeModel.nodeChanged(loadMoreNode);
+
+        ProgressManager.getInstance().run(new Task.Backgroundable(project, LinuxDoBundle.message("progress.search"), false) {
+            @Override
+            public void run(@NotNull ProgressIndicator indicator) {
+                try {
+                    List<Topic> topics = apiClient.searchTopics(currentSearchQuery, searchPage);
+
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        int loadMoreIndex = searchResultsNode.getIndex(loadMoreNode);
+                        searchResultsNode.remove(loadMoreNode);
+
+                        if (!topics.isEmpty()) {
+                            for (Topic topic : topics) {
+                                DefaultMutableTreeNode topicNode = new DefaultMutableTreeNode(
+                                        new TreeNodeData(NodeType.TOPIC, topic.getId(), topic.getTitle(),
+                                                "V." + topic.getViews() + " R." + topic.getReplyCount(),
+                                                topic.getUrl())
+                                );
+                                searchResultsNode.insert(topicNode, loadMoreIndex++);
+                            }
+
+                            // 继续添加加载更多
+                            if (topics.size() > 0) {
+                                DefaultMutableTreeNode newLoadMore = new DefaultMutableTreeNode(
+                                        new TreeNodeData(NodeType.LOAD_MORE_TOPICS, -2, 
+                                                LinuxDoBundle.message("node.loadMore"), "")
+                                );
+                                searchResultsNode.add(newLoadMore);
+                            }
+                        }
+
+                        treeModel.nodeStructureChanged(searchResultsNode);
+                    });
+                } catch (Exception e) {
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        loadMoreNode.setUserObject(new TreeNodeData(NodeType.LOAD_MORE_TOPICS, -2, 
+                                LinuxDoBundle.message("node.loadMore"), ""));
+                        treeModel.nodeChanged(loadMoreNode);
                         showError(LinuxDoBundle.message("message.loadMoreFailed") + e.getMessage());
                     });
                 }
@@ -1020,6 +1355,8 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         POST,
         NOTIFICATION,
         LOAD_MORE,
+        LOAD_MORE_TOPICS,  // 加载更多话题
+        SEARCH_RESULTS,    // 搜索结果
         INFO
     }
 
@@ -1083,6 +1420,11 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                             append("  " + data.description, SimpleTextAttributes.GRAYED_ATTRIBUTES);
                             setToolTipText(data.label + " - " + data.description);
                             break;
+                        case SEARCH_RESULTS:
+                            setIcon(AllIcons.Actions.Search);
+                            append(data.label, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
+                            setToolTipText(LinuxDoBundle.message("node.searchResults"));
+                            break;
                         case CATEGORY:
                             setIcon(AllIcons.Nodes.Folder);
                             append(data.label, SimpleTextAttributes.REGULAR_ATTRIBUTES);
@@ -1108,13 +1450,18 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                             setToolTipText(data.label);
                             break;
                         case LOAD_MORE:
-                            setIcon(AllIcons.General.ChevronDown);
+                            setIcon(AllIcons.General.Add);
                             append(data.label, SimpleTextAttributes.REGULAR_ATTRIBUTES);
                             append("  " + data.description, SimpleTextAttributes.GRAYED_ATTRIBUTES);
                             setToolTipText(data.label + " " + data.description);
                             break;
+                        case LOAD_MORE_TOPICS:
+                            setIcon(AllIcons.General.Add);
+                            append(data.label, SimpleTextAttributes.REGULAR_ATTRIBUTES);
+                            setToolTipText(LinuxDoBundle.message("node.loadMore"));
+                            break;
                         case INFO:
-                            setIcon(AllIcons.General.Information);
+                            // 不设置图标，避免加载中时显示蓝色 i 符号
                             append(data.label, SimpleTextAttributes.GRAYED_ATTRIBUTES);
                             setToolTipText(data.label);
                             break;

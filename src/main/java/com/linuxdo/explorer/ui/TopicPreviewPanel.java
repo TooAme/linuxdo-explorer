@@ -483,7 +483,7 @@ public class TopicPreviewPanel extends JPanel {
                 escapeJsonString(prompt)
         );
         
-        URL url = new URL(apiUrl);
+        URL url = java.net.URI.create(apiUrl).toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json");

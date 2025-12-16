@@ -174,6 +174,52 @@ public class DiscourseApiClient {
         return parseTopics(json);
     }
 
+    /**
+     * 搜索话题
+     */
+    public List<Topic> searchTopics(String query, int page) throws IOException {
+        String encodedQuery;
+        try {
+            encodedQuery = java.net.URLEncoder.encode(query, "UTF-8");
+        } catch (Exception e) {
+            encodedQuery = query;
+        }
+        String url = BASE_URL + "/search.json?q=" + encodedQuery + "&page=" + page;
+        Request request = createRequestBuilder(url).get().build();
+        String json = executeRequest(request);
+
+        return parseSearchResults(json);
+    }
+
+    private List<Topic> parseSearchResults(String json) throws IOException {
+        JsonObject root = parseJson(json);
+        
+        List<Topic> result = new ArrayList<>();
+        
+        // 搜索结果中的 topics 数组
+        if (root.has("topics")) {
+            JsonArray topics = root.getAsJsonArray("topics");
+            if (topics != null) {
+                for (JsonElement element : topics) {
+                    JsonObject topicObj = element.getAsJsonObject();
+                    Topic topic = new Topic();
+                    topic.setId(getIntSafe(topicObj, "id", 0));
+                    topic.setTitle(getStringSafe(topicObj, "title", LinuxDoBundle.message("fallback.untitled")));
+                    topic.setSlug(getStringSafe(topicObj, "slug", ""));
+                    topic.setPostsCount(getIntSafe(topicObj, "posts_count", 0));
+                    topic.setReplyCount(getIntSafe(topicObj, "reply_count", 0));
+                    topic.setViews(getIntSafe(topicObj, "views", 0));
+                    topic.setLikeCount(getIntSafe(topicObj, "like_count", 0));
+                    topic.setCategoryId(getIntSafe(topicObj, "category_id", 0));
+                    topic.setPinned(getBooleanSafe(topicObj, "pinned", false));
+                    result.add(topic);
+                }
+            }
+        }
+        
+        return result;
+    }
+
     private List<Topic> parseTopics(String json) throws IOException {
         JsonObject root = parseJson(json);
         
