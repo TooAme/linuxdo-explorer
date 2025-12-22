@@ -26,8 +26,10 @@
 - **Category Browsing**: Browse various forum categories and topics
 - **Topic Expansion**: Expand topics directly in sidebar to view all replies
 - **Topic Preview**: Double-click topic to view full content in built-in browser
+- **Search Topics**: Search bar in toolbar to find topics quickly
 - **Notifications**: Display unread notifications for quick updates
 - **Auto Refresh**: Support 5/10/20/60 minutes auto refresh
+- **Load More**: Pagination support for topics and replies
 
 ### Topic Saving
 - **Save Post Content**: Save topic as Markdown file (saved to `.linuxdoexp/content/`)
@@ -45,6 +47,11 @@
 - **Post Info**: Show/hide post number, author, time
 - **Font Size**: Small/Medium/Large options
 - **Ignore Line Breaks**: Optimize content layout
+
+### Loading Settings
+- **Topics per Load**: Configure how many topics to load at once (5-30)
+- **Replies per Load**: Configure how many replies to load at once (5-20)
+- **Notification Mode**: Off / Unread only / Show all
 
 ### Quick Disguise
 - **Shift+L Shortcut**: Toggle disguise/restore with one key

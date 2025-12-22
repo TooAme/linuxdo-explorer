@@ -228,6 +228,19 @@ public class LinuxDoSettings implements PersistentStateComponent<LinuxDoSettings
         state.notificationMode = mode;
     }
 
+    // ============ 预览模式设置 ============
+
+    /**
+     * 预览模式：panel=底部面板, tooltip=悬浮提示
+     */
+    public String getPreviewMode() {
+        return state.previewMode;
+    }
+
+    public void setPreviewMode(String mode) {
+        state.previewMode = mode;
+    }
+
     /**
      * 设置状态类
      */
@@ -250,5 +263,7 @@ public class LinuxDoSettings implements PersistentStateComponent<LinuxDoSettings
         public int repliesPerLoad = 20;
         // 通知显示模式：off=关闭, unread=仅未读, all=全部
         public String notificationMode = "unread";
+        // 预览模式：panel=底部面板, tooltip=悬浮提示
+        public String previewMode = "panel";
     }
 }

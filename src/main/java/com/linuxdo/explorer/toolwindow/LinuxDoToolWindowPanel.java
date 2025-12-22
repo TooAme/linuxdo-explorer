@@ -18,8 +18,14 @@ import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.ui.ColoredTreeCellRenderer;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.SimpleTextAttributes;
+import com.intellij.ui.awt.RelativePoint;
 import com.intellij.ui.components.JBScrollPane;
+import com.intellij.ui.components.JBTextArea;
+import com.intellij.ui.jcef.JBCefBrowser;
+import com.intellij.ui.popup.AbstractPopup;
 import com.intellij.ui.treeStructure.Tree;
+import com.intellij.openapi.ui.popup.JBPopup;
+import com.intellij.openapi.ui.popup.JBPopupFactory;
 import com.linuxdo.explorer.api.DiscourseApiClient;
 import com.linuxdo.explorer.model.*;
 import com.linuxdo.explorer.settings.LinuxDoSettings;
@@ -34,6 +40,7 @@ import javax.swing.tree.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.io.IOException;
 import java.util.*;
 import java.util.List;
@@ -68,6 +75,21 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
     private int searchPage = 0;
 
     private Timer autoRefreshTimer;
+    
+    // 内置预览面板相关
+    private JBCefBrowser previewBrowser;
+    private JPanel previewPanel;
+    private JLabel previewTitleLabel;
+    private JSplitPane splitPane;
+    
+    // tooltip模式相关
+    private JBPopup currentPopup;
+    private JBCefBrowser tooltipBrowser;
+    private TreePath lastHoveredPath;
+    private javax.swing.Timer popupShowTimer;
+    private javax.swing.Timer popupHideTimer;
+    private static final int POPUP_SHOW_DELAY = 500;
+    private static final int POPUP_HIDE_DELAY = 300;
 
     public LinuxDoToolWindowPanel(Project project, ToolWindow toolWindow) {
         super(true, true);
@@ -183,9 +205,36 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         // 设置工具栏
         setToolbar(createToolbar());
 
+        // 创建树形视图滚动面板
+        JBScrollPane treeScrollPane = new JBScrollPane(tree);
+        treeScrollPane.setBorder(null);  // 去掉边框
+        
+        // 创建内置预览面板
+        previewPanel = createPreviewPanel();
+        previewPanel.setBorder(null);  // 去掉边框
+        
+        // 创建分割面板（上下分割）
+        splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, treeScrollPane, previewPanel);
+        splitPane.setResizeWeight(0.6);  // 树形视图占60%
+        splitPane.setDividerSize(3);  // 细分割条
+        splitPane.setContinuousLayout(true);
+        splitPane.setBorder(null);  // 去掉边框
+        // 设置分割条颜色为暗色
+        splitPane.setUI(new javax.swing.plaf.basic.BasicSplitPaneUI() {
+            @Override
+            public javax.swing.plaf.basic.BasicSplitPaneDivider createDefaultDivider() {
+                return new javax.swing.plaf.basic.BasicSplitPaneDivider(this) {
+                    @Override
+                    public void paint(Graphics g) {
+                        g.setColor(JBColor.background());
+                        g.fillRect(0, 0, getWidth(), getHeight());
+                    }
+                };
+            }
+        });
+        
         // 设置内容
-        JBScrollPane scrollPane = new JBScrollPane(tree);
-        setContent(scrollPane);
+        setContent(splitPane);
 
         // 初始加载
         refreshData();
@@ -194,7 +243,10 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         setupAutoRefresh();
         
         // 设置伪装模式监听器
-        setupDisguiseMode(scrollPane);
+        setupDisguiseMode(treeScrollPane);
+        
+        // 根据设置初始化预览模式
+        setupPreviewMode();
         
         // 订阅设置变更消息，自动刷新
         ApplicationManager.getApplication().getMessageBus()
@@ -202,8 +254,11 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                 .subscribe(SettingsChangeNotifier.TOPIC, new SettingsChangeNotifier() {
                     @Override
                     public void settingsChanged() {
-                        // 在 EDT 上执行刷新
-                        ApplicationManager.getApplication().invokeLater(() -> refreshData());
+                        // 在 EDT 上执行刷新和预览模式切换
+                        ApplicationManager.getApplication().invokeLater(() -> {
+                            refreshData();
+                            setupPreviewMode();
+                        });
                     }
                 });
     }
@@ -211,6 +266,7 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
     // 伪装模式相关变量
     private boolean isDisguised = false;
     private DefaultTreeModel originalModel;
+    private int savedDividerLocation = -1;  // 保存分割条位置
     
     /**
      * 设置伪装模式 - Shift+L 快捷键切换
@@ -247,6 +303,10 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         
         originalModel = treeModel;
         isDisguised = true;
+        
+        // 保存分割条位置并隐藏预览面板
+        savedDividerLocation = splitPane.getDividerLocation();
+        previewPanel.setVisible(false);
         
         if ("hide".equals(mode)) {
             // 隐藏内容 - 显示空面板
@@ -285,6 +345,20 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         
         tree.setModel(originalModel);
         isDisguised = false;
+        
+        // 恢复预览面板显示
+        previewPanel.setVisible(true);
+        
+        // 刷新分割面板布局并恢复分割条位置
+        splitPane.revalidate();
+        splitPane.repaint();
+        
+        // 在布局完成后恢复分割条位置
+        if (savedDividerLocation > 0) {
+            SwingUtilities.invokeLater(() -> {
+                splitPane.setDividerLocation(savedDividerLocation);
+            });
+        }
     }
 
     private JComponent createToolbar() {
@@ -603,7 +677,7 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
     }
 
     /**
-     * 单击处理 - 处理"加载更多"节点
+     * 单击处理 - 处理"加载更多"节点和POST节点预览
      */
     private void handleSingleClick() {
         TreePath path = tree.getSelectionPath();
@@ -615,8 +689,11 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         if (userObject instanceof TreeNodeData) {
             TreeNodeData data = (TreeNodeData) userObject;
 
-            // 单击只处理"加载更多"类型的节点
             switch (data.type) {
+                case POST:
+                    // 单击POST节点时在底部预览面板显示内容
+                    showPostPreview(data);
+                    break;
                 case LOAD_MORE:
                     loadMorePosts(node, data.id);
                     break;
@@ -1344,6 +1421,392 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                 NotificationType.INFORMATION
         ));
     }
+    
+    /**
+     * 创建内置预览面板
+     */
+    private JPanel createPreviewPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        // 不设置边框，保持简洁
+        
+        // 标题栏
+        JPanel titleBar = new JPanel(new BorderLayout());
+        titleBar.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        titleBar.setBackground(JBColor.background());
+        
+        previewTitleLabel = new JLabel(LinuxDoBundle.message("preview.selectPost"));
+        previewTitleLabel.setForeground(JBColor.foreground());
+        titleBar.add(previewTitleLabel, BorderLayout.CENTER);
+        
+        // 关闭按钮
+        JButton closeButton = new JButton("×");
+        closeButton.setMargin(new Insets(0, 4, 0, 4));
+        closeButton.setFocusPainted(false);
+        closeButton.setBorderPainted(false);
+        closeButton.setContentAreaFilled(false);
+        closeButton.setToolTipText(LinuxDoBundle.message("preview.close"));
+        closeButton.addActionListener(e -> clearPreview());
+        titleBar.add(closeButton, BorderLayout.EAST);
+        
+        panel.add(titleBar, BorderLayout.NORTH);
+        
+        // 浏览器预览区域
+        previewBrowser = new JBCefBrowser();
+        panel.add(previewBrowser.getComponent(), BorderLayout.CENTER);
+        
+        // 初始显示空白提示
+        showEmptyPreview();
+        
+        return panel;
+    }
+    
+    /**
+     * 显示空白预览提示
+     */
+    private void showEmptyPreview() {
+        boolean isDark = !JBColor.isBright();
+        String bgColor = isDark ? "#2b2b2b" : "#ffffff";
+        String textColor = isDark ? "#888888" : "#999999";
+        
+        String html = "<html><head><style>" +
+                "body { font-family: 'Microsoft YaHei', sans-serif; " +
+                "background-color: " + bgColor + "; " +
+                "color: " + textColor + "; " +
+                "display: flex; justify-content: center; align-items: center; " +
+                "height: 100vh; margin: 0; text-align: center; }" +
+                "</style></head><body>" +
+                "<div>" + LinuxDoBundle.message("preview.clickToPreview") + "</div>" +
+                "</body></html>";
+        
+        previewBrowser.loadHTML(html);
+    }
+    
+    /**
+     * 清空预览内容
+     */
+    private void clearPreview() {
+        previewTitleLabel.setText(LinuxDoBundle.message("preview.selectPost"));
+        showEmptyPreview();
+    }
+    
+    /**
+     * 在底部预览面板显示POST内容
+     */
+    private void showPostPreview(TreeNodeData data) {
+        if (data == null || data.type != NodeType.POST) {
+            return;
+        }
+        
+        // 更新标题
+        String title = "<html><b>" + escapeHtml(data.label) + "</b> " +
+                "<span style='color:gray;'>" + escapeHtml(data.description) + "</span></html>";
+        previewTitleLabel.setText(title);
+        
+        // 构建HTML内容并加载
+        String htmlContent = buildPreviewHtml(data);
+        previewBrowser.loadHTML(htmlContent);
+    }
+    
+    /**
+     * 为预览面板构建HTML内容
+     */
+    private String buildPreviewHtml(TreeNodeData data) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<html><head><style>");
+        
+        // 判断是否是暗色主题
+        boolean isDark = !JBColor.isBright();
+        String bgColor = isDark ? "#2b2b2b" : "#ffffff";
+        String textColor = isDark ? "#a9b7c6" : "#000000";
+        String linkColor = "#589df6";
+        
+        // 获取黑白模式设置
+        LinuxDoSettings settings = LinuxDoSettings.getInstance();
+        boolean isGrayscale = settings.isGrayscaleImages();
+        
+        sb.append("body { font-family: 'Microsoft YaHei', sans-serif; font-size: 13px; ");
+        sb.append("background-color: ").append(bgColor).append("; ");
+        sb.append("color: ").append(textColor).append("; ");
+        sb.append("padding: 12px; margin: 0; line-height: 1.6; }");
+        sb.append("img { max-width: 100%; height: auto; display: block; margin: 8px 0; border-radius: 4px; ");
+        // 黑白模式 - 图片灰度滤镜
+        if (isGrayscale) {
+            sb.append("filter: grayscale(1); transition: filter 0.3s; }");
+            sb.append("img:hover { filter: grayscale(0); }");  // 鼠标悬停时恢复彩色
+        } else {
+            sb.append("}");
+        }
+        sb.append("a { color: ").append(linkColor).append("; }");
+        sb.append("pre { white-space: pre-wrap; word-wrap: break-word; background: ").append(isDark ? "#1e1e1e" : "#f5f5f5").append("; padding: 8px; border-radius: 4px; }");
+        sb.append("code { background: ").append(isDark ? "#1e1e1e" : "#f5f5f5").append("; padding: 2px 4px; border-radius: 3px; }");
+        sb.append("blockquote { border-left: 3px solid ").append(linkColor).append("; margin: 8px 0; padding-left: 12px; color: ").append(isDark ? "#888" : "#666").append("; }");
+        // 隐藏图片的meta信息元素
+        sb.append(".meta, .image-wrapper .meta, .lightbox-wrapper .meta, span.meta { display: none !important; }");
+        // 滚动条样式 - 暗色主题
+        sb.append("::-webkit-scrollbar { width: 8px; height: 8px; }");
+        sb.append("::-webkit-scrollbar-track { background: ").append(isDark ? "#1e1e1e" : "#f0f0f0").append("; }");
+        sb.append("::-webkit-scrollbar-thumb { background: ").append(isDark ? "#555" : "#ccc").append("; border-radius: 4px; }");
+        sb.append("::-webkit-scrollbar-thumb:hover { background: ").append(isDark ? "#666" : "#bbb").append("; }");
+        sb.append("</style></head><body>");
+        
+        // 如果有HTML内容，使用HTML内容（包含图片）
+        if (data.htmlContent != null && !data.htmlContent.isEmpty()) {
+            // 处理相对路径的图片URL
+            String html = data.htmlContent;
+            html = html.replaceAll("src=\"/uploads/", "src=\"https://linux.do/uploads/");
+            html = html.replaceAll("src='/uploads/", "src='https://linux.do/uploads/");
+            sb.append(html);
+        } else if (data.fullContent != null) {
+            // 回退到纯文本
+            sb.append("<pre>").append(escapeHtml(data.fullContent)).append("</pre>");
+        }
+        
+        sb.append("</body></html>");
+        return sb.toString();
+    }
+    
+    /**
+     * HTML转义
+     */
+    private static String escapeHtml(String text) {
+        if (text == null) return "";
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
+    }
+    
+    // ============ 预览模式切换 ============
+    
+    private boolean isTooltipMode = false;
+    private MouseMotionAdapter tooltipMouseMotionAdapter;
+    private MouseAdapter tooltipMouseAdapter;
+    private Point lastMouseScreenPoint;  // 保存鼠标屏幕位置
+    
+    /**
+     * 根据设置切换预览模式
+     */
+    private void setupPreviewMode() {
+        String mode = LinuxDoSettings.getInstance().getPreviewMode();
+        boolean newTooltipMode = "tooltip".equals(mode);
+        
+        if (newTooltipMode == isTooltipMode) {
+            return; // 模式没变化
+        }
+        
+        isTooltipMode = newTooltipMode;
+        
+        if (isTooltipMode) {
+            // 切换到tooltip模式 - 先保存分割条位置
+            savedDividerLocation = splitPane.getDividerLocation();
+            previewPanel.setVisible(false);
+            splitPane.revalidate();
+            splitPane.repaint();
+            setupTooltipListeners();
+        } else {
+            // 切换到面板模式
+            removeTooltipListeners();
+            hideTooltipPopup();
+            previewPanel.setVisible(true);
+            
+            // 强制刷新布局并恢复分割条位置
+            splitPane.revalidate();
+            splitPane.repaint();
+            
+            // 使用多次invokeLater确保布局完成后再设置位置
+            SwingUtilities.invokeLater(() -> {
+                if (savedDividerLocation > 0) {
+                    splitPane.setDividerLocation(savedDividerLocation);
+                } else {
+                    // 如果没有保存的位置，设置为60%
+                    splitPane.setDividerLocation(0.6);
+                }
+                splitPane.revalidate();
+            });
+        }
+    }
+    
+    /**
+     * 设置tooltip模式监听器
+     */
+    private void setupTooltipListeners() {
+        if (popupShowTimer == null) {
+            popupShowTimer = new javax.swing.Timer(POPUP_SHOW_DELAY, e -> {
+                if (lastHoveredPath != null) {
+                    showTooltipPopup(lastHoveredPath);
+                }
+            });
+            popupShowTimer.setRepeats(false);
+        }
+        
+        if (popupHideTimer == null) {
+            popupHideTimer = new javax.swing.Timer(POPUP_HIDE_DELAY, e -> {
+                hideTooltipPopup();
+            });
+            popupHideTimer.setRepeats(false);
+        }
+        
+        tooltipMouseMotionAdapter = new MouseMotionAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                if (!isTooltipMode) return;
+                
+                TreePath path = tree.getPathForLocation(e.getX(), e.getY());
+                
+                if (path == null) {
+                    scheduleHideTooltip();
+                    lastHoveredPath = null;
+                    return;
+                }
+                
+                DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+                Object userObject = node.getUserObject();
+                
+                if (userObject instanceof TreeNodeData) {
+                    TreeNodeData data = (TreeNodeData) userObject;
+                    
+                    if (data.type == NodeType.POST) {
+                        if (path.equals(lastHoveredPath)) {
+                            popupHideTimer.stop();
+                            return;
+                        }
+                        
+                        // 保存鼠标屏幕位置
+                        lastMouseScreenPoint = e.getLocationOnScreen();
+                        lastHoveredPath = path;
+                        popupHideTimer.stop();
+                        popupShowTimer.restart();
+                    } else {
+                        scheduleHideTooltip();
+                        lastHoveredPath = null;
+                    }
+                }
+            }
+        };
+        
+        tooltipMouseAdapter = new MouseAdapter() {
+            @Override
+            public void mouseExited(MouseEvent e) {
+                if (!isTooltipMode) return;
+                if (isMouseOverPopup(e)) return;
+                scheduleHideTooltip();
+                lastHoveredPath = null;
+            }
+        };
+        
+        tree.addMouseMotionListener(tooltipMouseMotionAdapter);
+        tree.addMouseListener(tooltipMouseAdapter);
+    }
+    
+    private void removeTooltipListeners() {
+        if (tooltipMouseMotionAdapter != null) {
+            tree.removeMouseMotionListener(tooltipMouseMotionAdapter);
+            tooltipMouseMotionAdapter = null;
+        }
+        if (tooltipMouseAdapter != null) {
+            tree.removeMouseListener(tooltipMouseAdapter);
+            tooltipMouseAdapter = null;
+        }
+    }
+    
+    private void showTooltipPopup(TreePath path) {
+        hideTooltipPopup();
+        
+        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        Object userObject = node.getUserObject();
+        
+        if (!(userObject instanceof TreeNodeData)) return;
+        
+        TreeNodeData data = (TreeNodeData) userObject;
+        if (data.type != NodeType.POST) return;
+        
+        JPanel contentPanel = new JPanel(new BorderLayout());
+        
+        JPanel titlePanel = new JPanel(new BorderLayout());
+        titlePanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        JLabel titleLabel = new JLabel("<html><b>" + escapeHtml(data.label) + "</b> <span style='color:gray;'>" + escapeHtml(data.description) + "</span></html>");
+        titlePanel.add(titleLabel, BorderLayout.CENTER);
+        contentPanel.add(titlePanel, BorderLayout.NORTH);
+        
+        tooltipBrowser = new JBCefBrowser();
+        tooltipBrowser.loadHTML(buildPreviewHtml(data));
+        JComponent browserComponent = tooltipBrowser.getComponent();
+        browserComponent.setPreferredSize(new Dimension(500, 350));
+        contentPanel.add(browserComponent, BorderLayout.CENTER);
+        
+        MouseAdapter popupMouseListener = new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                popupHideTimer.stop();
+                popupShowTimer.stop();
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                Component source = e.getComponent();
+                Point p = e.getPoint();
+                SwingUtilities.convertPointToScreen(p, source);
+                if (currentPopup != null && !currentPopup.isDisposed()) {
+                    Component popupContent = currentPopup.getContent();
+                    if (popupContent != null) {
+                        Point popupLocation = popupContent.getLocationOnScreen();
+                        Rectangle popupBounds = new Rectangle(popupLocation, popupContent.getSize());
+                        if (!popupBounds.contains(p)) {
+                            scheduleHideTooltip();
+                        }
+                    }
+                }
+            }
+        };
+        
+        contentPanel.addMouseListener(popupMouseListener);
+        titlePanel.addMouseListener(popupMouseListener);
+        browserComponent.addMouseListener(popupMouseListener);
+        
+        currentPopup = JBPopupFactory.getInstance()
+                .createComponentPopupBuilder(contentPanel, null)
+                .setResizable(true)
+                .setMovable(true)
+                .setRequestFocus(false)
+                .setCancelOnClickOutside(false)
+                .setCancelOnOtherWindowOpen(false)
+                .setCancelOnWindowDeactivation(false)
+                .createPopup();
+        
+        // 在鼠标位置显示（左下角为鼠标位置）
+        if (lastMouseScreenPoint != null) {
+            currentPopup.showInScreenCoordinates(tree, lastMouseScreenPoint);
+        }
+    }
+    
+    private void hideTooltipPopup() {
+        if (currentPopup != null && !currentPopup.isDisposed()) {
+            currentPopup.cancel();
+            currentPopup = null;
+        }
+        if (tooltipBrowser != null) {
+            tooltipBrowser.dispose();
+            tooltipBrowser = null;
+        }
+    }
+    
+    private void scheduleHideTooltip() {
+        if (popupShowTimer != null) popupShowTimer.stop();
+        if (popupHideTimer != null) popupHideTimer.restart();
+    }
+    
+    private boolean isMouseOverPopup(MouseEvent e) {
+        if (currentPopup == null || currentPopup.isDisposed()) return false;
+        try {
+            Component popupContent = currentPopup.getContent();
+            if (popupContent != null && popupContent.isShowing()) {
+                Point mouseScreenPos = e.getLocationOnScreen();
+                Point popupLocation = popupContent.getLocationOnScreen();
+                Rectangle popupBounds = new Rectangle(popupLocation, popupContent.getSize());
+                return popupBounds.contains(mouseScreenPos);
+            }
+        } catch (Exception ex) {}
+        return false;
+    }
 
     /**
      * 节点类型枚举
@@ -1441,8 +1904,8 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                             // 不设置图标
                             append(data.label, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
                             append("  " + data.description, SimpleTextAttributes.GRAYED_ATTRIBUTES);
-                            // 根据设置决定是否显示图片预览
-                            setToolTipText(buildPostTooltip(data));
+                            // POST节点使用JBPopup悬浮预览，不使用tooltip
+                            setToolTipText(null);
                             break;
                         case NOTIFICATION:
                             setIcon(AllIcons.Toolwindows.Notifications);
@@ -1476,28 +1939,6 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
                     .replace("&", "&amp;")
                     .replace("<", "&lt;")
                     .replace(">", "&gt;");
-        }
-        
-        /**
-         * 构建帖子的 tooltip
-         */
-        private String buildPostTooltip(TreeNodeData data) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("<html><div style='max-width:500px;'>");
-            
-            // 显示 meta 信息
-            sb.append("<b>").append(escapeHtml(data.label)).append("</b>");
-            if (data.description != null && !data.description.isEmpty()) {
-                sb.append(" <span style='color:gray;'>").append(escapeHtml(data.description)).append("</span>");
-            }
-            sb.append("<hr/>");
-            
-            // 只显示纯文本内容
-            String textContent = data.fullContent != null ? data.fullContent : "";
-            sb.append("<pre style='white-space:pre-wrap;margin:0;'>").append(escapeHtml(textContent)).append("</pre>");
-            
-            sb.append("</div></html>");
-            return sb.toString();
         }
     }
 }

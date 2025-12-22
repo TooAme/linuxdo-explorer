@@ -36,6 +36,8 @@ public class LinuxDoSettingsConfigurable implements Configurable {
     private JSpinner repliesPerLoadSpinner;
     // 通知设置
     private JComboBox<String> notificationModeComboBox;
+    // 预览模式设置
+    private JComboBox<String> previewModeComboBox;
 
     @Override
     public @NlsContexts.ConfigurableName String getDisplayName() {
@@ -163,6 +165,19 @@ public class LinuxDoSettingsConfigurable implements Configurable {
         notificationModePanel.add(notificationModeComboBox);
         notificationModePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
         panel.add(notificationModePanel);
+        panel.add(Box.createVerticalStrut(5));
+
+        // 预览模式
+        JPanel previewModePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        previewModePanel.add(new JLabel(LinuxDoBundle.message("settings.previewMode")));
+        previewModeComboBox = new JComboBox<>(new String[]{
+                LinuxDoBundle.message("settings.previewMode.panel"),
+                LinuxDoBundle.message("settings.previewMode.tooltip")
+        });
+        previewModeComboBox.setToolTipText(LinuxDoBundle.message("settings.previewMode.tooltip.hint"));
+        previewModePanel.add(previewModeComboBox);
+        previewModePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(previewModePanel);
 
         return panel;
     }
@@ -330,6 +345,11 @@ public class LinuxDoSettingsConfigurable implements Configurable {
         if ("off".equals(notificationMode)) notificationModeComboBox.setSelectedIndex(0);
         else if ("unread".equals(notificationMode)) notificationModeComboBox.setSelectedIndex(1);
         else notificationModeComboBox.setSelectedIndex(2); // all
+        
+        // 设置预览模式
+        String previewMode = settings.getPreviewMode();
+        if ("tooltip".equals(previewMode)) previewModeComboBox.setSelectedIndex(1);
+        else previewModeComboBox.setSelectedIndex(0); // panel (默认)
     }
 
     @Override
@@ -352,7 +372,8 @@ public class LinuxDoSettingsConfigurable implements Configurable {
                 !getDisguiseMode().equals(settings.getDisguiseMode()) ||
                 (Integer) topicsPerLoadSpinner.getValue() != settings.getTopicsPerLoad() ||
                 (Integer) repliesPerLoadSpinner.getValue() != settings.getRepliesPerLoad() ||
-                !getNotificationMode().equals(settings.getNotificationMode());
+                !getNotificationMode().equals(settings.getNotificationMode()) ||
+                !getPreviewMode().equals(settings.getPreviewMode());
     }
 
     @Override
@@ -376,6 +397,7 @@ public class LinuxDoSettingsConfigurable implements Configurable {
         settings.setTopicsPerLoad((Integer) topicsPerLoadSpinner.getValue());
         settings.setRepliesPerLoad((Integer) repliesPerLoadSpinner.getValue());
         settings.setNotificationMode(getNotificationMode());
+        settings.setPreviewMode(getPreviewMode());
         
         // 发布设置变更消息，触发工具窗口刷新
         com.intellij.openapi.application.ApplicationManager.getApplication()
@@ -425,5 +447,10 @@ public class LinuxDoSettingsConfigurable implements Configurable {
             case 1: return "unread";
             default: return "all";
         }
+    }
+    
+    private String getPreviewMode() {
+        int index = previewModeComboBox.getSelectedIndex();
+        return index == 1 ? "tooltip" : "panel";
     }
 }
