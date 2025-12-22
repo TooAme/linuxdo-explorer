@@ -22,7 +22,7 @@ public class LinuxDoSettingsConfigurable implements Configurable {
     private JCheckBox showEmojiCheckBox;
     private JCheckBox ignoreLineBreaksCheckBox;
     private JCheckBox compactModeCheckBox;
-    private JCheckBox grayscaleImagesCheckBox;
+    private JComboBox<String> imageFilterModeComboBox;  // 替换原来的grayscaleImagesCheckBox
     private JCheckBox showPostInfoCheckBox;
     private JComboBox<String> autoRefreshComboBox;
     private JComboBox<String> fontSizeComboBox;
@@ -83,15 +83,26 @@ public class LinuxDoSettingsConfigurable implements Configurable {
         showEmojiCheckBox = new JCheckBox(LinuxDoBundle.message("settings.showEmoji"));
         ignoreLineBreaksCheckBox = new JCheckBox(LinuxDoBundle.message("settings.ignoreLineBreaks"));
         compactModeCheckBox = new JCheckBox(LinuxDoBundle.message("settings.compactMode"));
-        grayscaleImagesCheckBox = new JCheckBox(LinuxDoBundle.message("settings.grayscaleImages"));
         showPostInfoCheckBox = new JCheckBox(LinuxDoBundle.message("settings.showPostInfo"));
 
         panel.add(showImagesCheckBox);
         panel.add(showEmojiCheckBox);
         panel.add(ignoreLineBreaksCheckBox);
         panel.add(compactModeCheckBox);
-        panel.add(grayscaleImagesCheckBox);
         panel.add(showPostInfoCheckBox);
+        panel.add(Box.createVerticalStrut(5));
+
+        // 图片滤镜模式
+        JPanel imageFilterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        imageFilterPanel.add(new JLabel(LinuxDoBundle.message("settings.imageFilterMode")));
+        imageFilterModeComboBox = new JComboBox<>(new String[]{
+                LinuxDoBundle.message("settings.imageFilterMode.normal"),
+                LinuxDoBundle.message("settings.imageFilterMode.grayscale"),
+                LinuxDoBundle.message("settings.imageFilterMode.halftone")
+        });
+        imageFilterPanel.add(imageFilterModeComboBox);
+        imageFilterPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(imageFilterPanel);
         panel.add(Box.createVerticalStrut(10));
 
         // 自动刷新
@@ -307,8 +318,13 @@ public class LinuxDoSettingsConfigurable implements Configurable {
         showEmojiCheckBox.setSelected(settings.isShowEmoji());
         ignoreLineBreaksCheckBox.setSelected(settings.isIgnoreLineBreaks());
         compactModeCheckBox.setSelected(settings.isCompactMode());
-        grayscaleImagesCheckBox.setSelected(settings.isGrayscaleImages());
         showPostInfoCheckBox.setSelected(settings.isShowPostInfo());
+        
+        // 设置图片滤镜模式
+        String filterMode = settings.getImageFilterMode();
+        if ("grayscale".equals(filterMode)) imageFilterModeComboBox.setSelectedIndex(1);
+        else if ("halftone".equals(filterMode)) imageFilterModeComboBox.setSelectedIndex(2);
+        else imageFilterModeComboBox.setSelectedIndex(0); // normal
 
         // 设置自动刷新下拉框
         int minutes = settings.getAutoRefreshMinutes();
@@ -362,7 +378,7 @@ public class LinuxDoSettingsConfigurable implements Configurable {
                 showEmojiCheckBox.isSelected() != settings.isShowEmoji() ||
                 ignoreLineBreaksCheckBox.isSelected() != settings.isIgnoreLineBreaks() ||
                 compactModeCheckBox.isSelected() != settings.isCompactMode() ||
-                grayscaleImagesCheckBox.isSelected() != settings.isGrayscaleImages() ||
+                !getImageFilterMode().equals(settings.getImageFilterMode()) ||
                 showPostInfoCheckBox.isSelected() != settings.isShowPostInfo() ||
                 getAutoRefreshMinutes() != settings.getAutoRefreshMinutes() ||
                 !getTopicFontSize().equals(settings.getTopicFontSize()) ||
@@ -386,7 +402,7 @@ public class LinuxDoSettingsConfigurable implements Configurable {
         settings.setShowEmoji(showEmojiCheckBox.isSelected());
         settings.setIgnoreLineBreaks(ignoreLineBreaksCheckBox.isSelected());
         settings.setCompactMode(compactModeCheckBox.isSelected());
-        settings.setGrayscaleImages(grayscaleImagesCheckBox.isSelected());
+        settings.setImageFilterMode(getImageFilterMode());
         settings.setShowPostInfo(showPostInfoCheckBox.isSelected());
         settings.setAutoRefreshMinutes(getAutoRefreshMinutes());
         settings.setTopicFontSize(getTopicFontSize());
@@ -452,5 +468,14 @@ public class LinuxDoSettingsConfigurable implements Configurable {
     private String getPreviewMode() {
         int index = previewModeComboBox.getSelectedIndex();
         return index == 1 ? "tooltip" : "panel";
+    }
+    
+    private String getImageFilterMode() {
+        int index = imageFilterModeComboBox.getSelectedIndex();
+        switch (index) {
+            case 1: return "grayscale";
+            case 2: return "halftone";
+            default: return "normal";
+        }
     }
 }

@@ -103,12 +103,73 @@ public class TopicPreviewPanel extends JPanel {
         };
 
         String compactClass = settings.isCompactMode() ? "compact" : "";
-        String grayscaleClass = settings.isGrayscaleImages() ? "grayscale" : "";
+        
+        // 根据图片滤镜模式设置类名
+        String imageFilterMode = settings.getImageFilterMode();
+        String imageFilterClass = "";
+        if ("grayscale".equals(imageFilterMode)) {
+            imageFilterClass = "grayscale";
+        } else if ("halftone".equals(imageFilterMode)) {
+            imageFilterClass = "halftone";
+        }
         
         // 检测 IDE 是否为暗色主题（JBColor.isBright() 返回 true 表示亮色主题）
         boolean isDarkTheme = !JBColor.isBright();
         String themeClass = isDarkTheme ? "dark" : "light";
-        String bodyClasses = (themeClass + " " + compactClass + " " + grayscaleClass).trim();
+        String bodyClasses = (themeClass + " " + compactClass + " " + imageFilterClass).trim();
+        
+        // 半色调SVG filter
+        String halftoneFilter = "";
+        if ("halftone".equals(imageFilterMode)) {
+            String dotColor = isDarkTheme ? "#a9b7c6" : "#333333";
+            halftoneFilter = "<svg width=\"0\" height=\"0\" style=\"position:absolute;\">" +
+                "<defs>" +
+                "<circle id=\"dot1\" cx=\"4\" cy=\"4\" r=\"0.5\" />" +
+                "<circle id=\"dot2\" cx=\"4\" cy=\"4\" r=\"1\" />" +
+                "<circle id=\"dot3\" cx=\"4\" cy=\"4\" r=\"1.5\" />" +
+                "<circle id=\"dot4\" cx=\"4\" cy=\"4\" r=\"2\" />" +
+                "<circle id=\"dot5\" cx=\"4\" cy=\"4\" r=\"2.5\" />" +
+                "<circle id=\"dot6\" cx=\"4\" cy=\"4\" r=\"3\" />" +
+                "<circle id=\"dot7\" cx=\"4\" cy=\"4\" r=\"3.5\" />" +
+                "<circle id=\"dot8\" cx=\"4\" cy=\"4\" r=\"4\" />" +
+                "<filter id=\"halftone-filter\" color-interpolation-filters=\"sRGB\" primitiveUnits=\"userSpaceOnUse\">" +
+                "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot1\" /><feTile result=\"dot1-tile\" />" +
+                "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot2\" /><feTile result=\"dot2-tile\" />" +
+                "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot3\" /><feTile result=\"dot3-tile\" />" +
+                "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot4\" /><feTile result=\"dot4-tile\" />" +
+                "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot5\" /><feTile result=\"dot5-tile\" />" +
+                "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot6\" /><feTile result=\"dot6-tile\" />" +
+                "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot7\" /><feTile result=\"dot7-tile\" />" +
+                "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot8\" /><feTile result=\"dot8-tile\" />" +
+                "<feColorMatrix in=\"SourceGraphic\" type=\"luminanceToAlpha\" result=\"lum\" />" +
+                "<feComponentTransfer in=\"lum\" result=\"lum-map\"><feFuncA type=\"table\" tableValues=\"1 0\" /></feComponentTransfer>" +
+                "<feComponentTransfer in=\"lum-map\" result=\"thresh1\"><feFuncA type=\"discrete\" tableValues=\"1 0 0 0 0 0 0 0\" /></feComponentTransfer>" +
+                "<feComponentTransfer in=\"lum-map\" result=\"thresh2\"><feFuncA type=\"discrete\" tableValues=\"0 1 0 0 0 0 0 0\" /></feComponentTransfer>" +
+                "<feComponentTransfer in=\"lum-map\" result=\"thresh3\"><feFuncA type=\"discrete\" tableValues=\"0 0 1 0 0 0 0 0\" /></feComponentTransfer>" +
+                "<feComponentTransfer in=\"lum-map\" result=\"thresh4\"><feFuncA type=\"discrete\" tableValues=\"0 0 0 1 0 0 0 0\" /></feComponentTransfer>" +
+                "<feComponentTransfer in=\"lum-map\" result=\"thresh5\"><feFuncA type=\"discrete\" tableValues=\"0 0 0 0 1 0 0 0\" /></feComponentTransfer>" +
+                "<feComponentTransfer in=\"lum-map\" result=\"thresh6\"><feFuncA type=\"discrete\" tableValues=\"0 0 0 0 0 1 0 0\" /></feComponentTransfer>" +
+                "<feComponentTransfer in=\"lum-map\" result=\"thresh7\"><feFuncA type=\"discrete\" tableValues=\"0 0 0 0 0 0 1 0\" /></feComponentTransfer>" +
+                "<feComponentTransfer in=\"lum-map\" result=\"thresh8\"><feFuncA type=\"discrete\" tableValues=\"0 0 0 0 0 0 0 1\" /></feComponentTransfer>" +
+                "<feComposite in=\"thresh1\" in2=\"dot1-tile\" operator=\"in\" result=\"level1\" />" +
+                "<feComposite in=\"thresh2\" in2=\"dot2-tile\" operator=\"in\" result=\"level2\" />" +
+                "<feComposite in=\"thresh3\" in2=\"dot3-tile\" operator=\"in\" result=\"level3\" />" +
+                "<feComposite in=\"thresh4\" in2=\"dot4-tile\" operator=\"in\" result=\"level4\" />" +
+                "<feComposite in=\"thresh5\" in2=\"dot5-tile\" operator=\"in\" result=\"level5\" />" +
+                "<feComposite in=\"thresh6\" in2=\"dot6-tile\" operator=\"in\" result=\"level6\" />" +
+                "<feComposite in=\"thresh7\" in2=\"dot7-tile\" operator=\"in\" result=\"level7\" />" +
+                "<feComposite in=\"thresh8\" in2=\"dot8-tile\" operator=\"in\" result=\"level8\" />" +
+                "<feMerge result=\"merged\">" +
+                "<feMergeNode in=\"level8\" /><feMergeNode in=\"level7\" /><feMergeNode in=\"level6\" /><feMergeNode in=\"level5\" />" +
+                "<feMergeNode in=\"level4\" /><feMergeNode in=\"level3\" /><feMergeNode in=\"level2\" /><feMergeNode in=\"level1\" />" +
+                "</feMerge>" +
+                "<feComposite in=\"merged\" in2=\"SourceGraphic\" operator=\"in\" result=\"masked\" />" +
+                "<feFlood flood-color=\"" + dotColor + "\" result=\"color\" />" +
+                "<feComposite in=\"color\" in2=\"masked\" operator=\"in\" />" +
+                "</filter>" +
+                "</defs>" +
+                "</svg>";
+        }
 
         String css = """
                 <style>
@@ -225,11 +286,21 @@ public class TopicPreviewPanel extends JPanel {
                     }
                     body.grayscale img {
                         filter: grayscale(1);
-                        transition: all 0.5s ease-in-out;
+                        transition: all 0.3s ease-in-out 0s;
                     }
                     body.grayscale img:hover {
                         filter: grayscale(0);
                         transform: scale(1.01);
+                        transition-delay: 0.5s;
+                    }
+                    body.halftone img {
+                        filter: url(#halftone-filter);
+                        transition: all 0.3s ease-in-out 0s;
+                    }
+                    body.halftone img:hover {
+                        filter: none;
+                        transform: scale(1.01);
+                        transition-delay: 0.5s;
                     }
                     /* 隐藏 .meta 元素 */
                     .meta {
@@ -247,6 +318,7 @@ public class TopicPreviewPanel extends JPanel {
                css +
                "</head>\n" +
                "<body class=\"" + bodyClasses + "\">\n" +
+               halftoneFilter +
                "    <div class=\"container\">\n" +
                "        <h1 class=\"topic-title\">" + escapeHtml(title) + "</h1>\n" +
                "        <p class=\"topic-subtitle\">" + LinuxDoBundle.message("ui.postsCount", posts.size()) + "</p>\n" +

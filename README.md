@@ -43,10 +43,11 @@
 - **Show Images**: Toggle image display in topic window
 - **Show Emoji**: Toggle emoji display in topic window
 - **Compact Mode**: Reduce whitespace in detail page
-- **Grayscale Mode**: Display images in grayscale
+- **Image Filter**: Normal / Grayscale / Halftone (dot matrix) modes
 - **Post Info**: Show/hide post number, author, time
 - **Font Size**: Small/Medium/Large options
 - **Ignore Line Breaks**: Optimize content layout
+- **Preview Mode**: Bottom panel or hover tooltip preview
 
 ### Loading Settings
 - **Topics per Load**: Configure how many topics to load at once (5-30)

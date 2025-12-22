@@ -134,12 +134,30 @@ public class LinuxDoSettings implements PersistentStateComponent<LinuxDoSettings
         state.topicFontSize = topicFontSize;
     }
 
+    /**
+     * 图片滤镜模式：normal=正常, grayscale=黑白, halftone=点阵
+     */
+    public String getImageFilterMode() {
+        // 向后兼容：如果旧的grayscaleImages为true，返回grayscale
+        if (state.imageFilterMode == null || state.imageFilterMode.isEmpty()) {
+            return state.grayscaleImages ? "grayscale" : "normal";
+        }
+        return state.imageFilterMode;
+    }
+
+    public void setImageFilterMode(String mode) {
+        state.imageFilterMode = mode;
+        // 同时更新旧字段以保持兼容
+        state.grayscaleImages = "grayscale".equals(mode);
+    }
+
+    // 保留旧方法以保持兼容
     public boolean isGrayscaleImages() {
-        return state.grayscaleImages;
+        return "grayscale".equals(getImageFilterMode());
     }
 
     public void setGrayscaleImages(boolean grayscaleImages) {
-        state.grayscaleImages = grayscaleImages;
+        setImageFilterMode(grayscaleImages ? "grayscale" : "normal");
     }
 
     public boolean isShowPostInfo() {
@@ -251,7 +269,8 @@ public class LinuxDoSettings implements PersistentStateComponent<LinuxDoSettings
         public boolean ignoreLineBreaks = false;
         public boolean compactMode = false;
         public String topicFontSize = "medium";
-        public boolean grayscaleImages = false;
+        public boolean grayscaleImages = false;  // 保留用于向后兼容
+        public String imageFilterMode = "normal";  // normal=正常, grayscale=黑白, halftone=点阵
         public boolean showPostInfo = true;
         // OpenAI 配置
         public String openaiUrl = "https://open.bigmodel.cn/api/paas/v4/chat/completions";

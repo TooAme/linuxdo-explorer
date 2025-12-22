@@ -17,6 +17,11 @@ public class LinuxDoToolWindowFactory implements ToolWindowFactory {
         LinuxDoToolWindowPanel panel = new LinuxDoToolWindowPanel(project, toolWindow);
         ContentFactory contentFactory = ContentFactory.getInstance();
         Content content = contentFactory.createContent(panel, "", false);
+        content.setCloseable(false);
+        content.setPreferredFocusableComponent(panel);
         toolWindow.getContentManager().addContent(content);
+        
+        // 移除工具窗口组件边框
+        toolWindow.getComponent().setBorder(null);
     }
 }

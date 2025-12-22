@@ -33,6 +33,7 @@ import com.linuxdo.explorer.settings.LinuxDoSettingsConfigurable;
 import com.linuxdo.explorer.settings.SettingsChangeNotifier;
 import com.linuxdo.explorer.ui.TopicPreviewPanel;
 import com.linuxdo.explorer.util.LinuxDoBundle;
+import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -96,6 +97,9 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         this.project = project;
         this.toolWindow = toolWindow;
         this.apiClient = new DiscourseApiClient();
+        
+        // 移除面板边框
+        setBorder(JBUI.Borders.empty());
 
         // 创建树结构
         rootNode = new DefaultMutableTreeNode("Linux.do");
@@ -235,6 +239,9 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         
         // 设置内容
         setContent(splitPane);
+        
+        // 确保移除所有边框
+        removeAllBorders(this);
 
         // 初始加载
         refreshData();
@@ -387,6 +394,7 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         
         // 创建包含工具栏和搜索框的面板
         JPanel toolbarPanel = new JPanel(new BorderLayout());
+        toolbarPanel.setBorder(null);  // 移除边框
         toolbarPanel.add(toolbar.getComponent(), BorderLayout.WEST);
         
         // 创建搜索框
@@ -1444,15 +1452,20 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         closeButton.setFocusPainted(false);
         closeButton.setBorderPainted(false);
         closeButton.setContentAreaFilled(false);
-        closeButton.setToolTipText(LinuxDoBundle.message("preview.close"));
         closeButton.addActionListener(e -> clearPreview());
         titleBar.add(closeButton, BorderLayout.EAST);
+        titleBar.setBorder(null);  // 移除标题栏边框
         
         panel.add(titleBar, BorderLayout.NORTH);
         
         // 浏览器预览区域
         previewBrowser = new JBCefBrowser();
-        panel.add(previewBrowser.getComponent(), BorderLayout.CENTER);
+        JComponent browserComponent = previewBrowser.getComponent();
+        if (browserComponent instanceof JPanel) {
+            ((JPanel) browserComponent).setBorder(null);
+        }
+        panel.add(browserComponent, BorderLayout.CENTER);
+        panel.setBorder(null);  // 移除面板边框
         
         // 初始显示空白提示
         showEmptyPreview();
@@ -1520,22 +1533,28 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         String textColor = isDark ? "#a9b7c6" : "#000000";
         String linkColor = "#589df6";
         
-        // 获取黑白模式设置
+        // 获取图片滤镜模式设置
         LinuxDoSettings settings = LinuxDoSettings.getInstance();
-        boolean isGrayscale = settings.isGrayscaleImages();
+        String imageFilterMode = settings.getImageFilterMode();
         
         sb.append("body { font-family: 'Microsoft YaHei', sans-serif; font-size: 13px; ");
         sb.append("background-color: ").append(bgColor).append("; ");
         sb.append("color: ").append(textColor).append("; ");
         sb.append("padding: 12px; margin: 0; line-height: 1.6; }");
         sb.append("img { max-width: 100%; height: auto; display: block; margin: 8px 0; border-radius: 4px; ");
-        // 黑白模式 - 图片灰度滤镜
-        if (isGrayscale) {
-            sb.append("filter: grayscale(1); transition: filter 0.3s; }");
-            sb.append("img:hover { filter: grayscale(0); }");  // 鼠标悬停时恢复彩色
+        
+        // 根据滤镜模式应用不同的CSS
+        if ("grayscale".equals(imageFilterMode)) {
+            // 默认状态立即应用滤镜，hover时延迟0.5秒后恢复
+            sb.append("filter: grayscale(1); transition: filter 0.3s ease 0s; }");
+            sb.append("img:hover { filter: grayscale(0); transition-delay: 0.5s; }");
+        } else if ("halftone".equals(imageFilterMode)) {
+            sb.append("filter: url(#halftone-filter); transition: filter 0.3s ease 0s; }");
+            sb.append("img:hover { filter: none; transition-delay: 0.5s; }");
         } else {
             sb.append("}");
         }
+        
         sb.append("a { color: ").append(linkColor).append("; }");
         sb.append("pre { white-space: pre-wrap; word-wrap: break-word; background: ").append(isDark ? "#1e1e1e" : "#f5f5f5").append("; padding: 8px; border-radius: 4px; }");
         sb.append("code { background: ").append(isDark ? "#1e1e1e" : "#f5f5f5").append("; padding: 2px 4px; border-radius: 3px; }");
@@ -1548,6 +1567,11 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         sb.append("::-webkit-scrollbar-thumb { background: ").append(isDark ? "#555" : "#ccc").append("; border-radius: 4px; }");
         sb.append("::-webkit-scrollbar-thumb:hover { background: ").append(isDark ? "#666" : "#bbb").append("; }");
         sb.append("</style></head><body>");
+        
+        // 如果是半色调模式，添加SVG filter定义
+        if ("halftone".equals(imageFilterMode)) {
+            sb.append(buildHalftoneFilter(isDark));
+        }
         
         // 如果有HTML内容，使用HTML内容（包含图片）
         if (data.htmlContent != null && !data.htmlContent.isEmpty()) {
@@ -1563,6 +1587,78 @@ public class LinuxDoToolWindowPanel extends SimpleToolWindowPanel {
         
         sb.append("</body></html>");
         return sb.toString();
+    }
+    
+    /**
+     * 构建半色调SVG滤镜
+     */
+    private String buildHalftoneFilter(boolean isDark) {
+        String dotColor = isDark ? "#a9b7c6" : "#333333";
+        return "<svg width=\"0\" height=\"0\" style=\"position:absolute;\">" +
+            "<defs>" +
+            "<circle id=\"dot1\" cx=\"4\" cy=\"4\" r=\"0.5\" />" +
+            "<circle id=\"dot2\" cx=\"4\" cy=\"4\" r=\"1\" />" +
+            "<circle id=\"dot3\" cx=\"4\" cy=\"4\" r=\"1.5\" />" +
+            "<circle id=\"dot4\" cx=\"4\" cy=\"4\" r=\"2\" />" +
+            "<circle id=\"dot5\" cx=\"4\" cy=\"4\" r=\"2.5\" />" +
+            "<circle id=\"dot6\" cx=\"4\" cy=\"4\" r=\"3\" />" +
+            "<circle id=\"dot7\" cx=\"4\" cy=\"4\" r=\"3.5\" />" +
+            "<circle id=\"dot8\" cx=\"4\" cy=\"4\" r=\"4\" />" +
+            "<filter id=\"halftone-filter\" color-interpolation-filters=\"sRGB\" primitiveUnits=\"userSpaceOnUse\">" +
+            "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot1\" /><feTile result=\"dot1-tile\" />" +
+            "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot2\" /><feTile result=\"dot2-tile\" />" +
+            "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot3\" /><feTile result=\"dot3-tile\" />" +
+            "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot4\" /><feTile result=\"dot4-tile\" />" +
+            "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot5\" /><feTile result=\"dot5-tile\" />" +
+            "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot6\" /><feTile result=\"dot6-tile\" />" +
+            "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot7\" /><feTile result=\"dot7-tile\" />" +
+            "<feImage width=\"8\" height=\"8\" xlink:href=\"#dot8\" /><feTile result=\"dot8-tile\" />" +
+            "<feColorMatrix in=\"SourceGraphic\" type=\"luminanceToAlpha\" result=\"lum\" />" +
+            "<feComponentTransfer in=\"lum\" result=\"lum-map\"><feFuncA type=\"table\" tableValues=\"1 0\" /></feComponentTransfer>" +
+            "<feComponentTransfer in=\"lum-map\" result=\"thresh1\"><feFuncA type=\"discrete\" tableValues=\"1 0 0 0 0 0 0 0\" /></feComponentTransfer>" +
+            "<feComponentTransfer in=\"lum-map\" result=\"thresh2\"><feFuncA type=\"discrete\" tableValues=\"0 1 0 0 0 0 0 0\" /></feComponentTransfer>" +
+            "<feComponentTransfer in=\"lum-map\" result=\"thresh3\"><feFuncA type=\"discrete\" tableValues=\"0 0 1 0 0 0 0 0\" /></feComponentTransfer>" +
+            "<feComponentTransfer in=\"lum-map\" result=\"thresh4\"><feFuncA type=\"discrete\" tableValues=\"0 0 0 1 0 0 0 0\" /></feComponentTransfer>" +
+            "<feComponentTransfer in=\"lum-map\" result=\"thresh5\"><feFuncA type=\"discrete\" tableValues=\"0 0 0 0 1 0 0 0\" /></feComponentTransfer>" +
+            "<feComponentTransfer in=\"lum-map\" result=\"thresh6\"><feFuncA type=\"discrete\" tableValues=\"0 0 0 0 0 1 0 0\" /></feComponentTransfer>" +
+            "<feComponentTransfer in=\"lum-map\" result=\"thresh7\"><feFuncA type=\"discrete\" tableValues=\"0 0 0 0 0 0 1 0\" /></feComponentTransfer>" +
+            "<feComponentTransfer in=\"lum-map\" result=\"thresh8\"><feFuncA type=\"discrete\" tableValues=\"0 0 0 0 0 0 0 1\" /></feComponentTransfer>" +
+            "<feComposite in=\"thresh1\" in2=\"dot1-tile\" operator=\"in\" result=\"level1\" />" +
+            "<feComposite in=\"thresh2\" in2=\"dot2-tile\" operator=\"in\" result=\"level2\" />" +
+            "<feComposite in=\"thresh3\" in2=\"dot3-tile\" operator=\"in\" result=\"level3\" />" +
+            "<feComposite in=\"thresh4\" in2=\"dot4-tile\" operator=\"in\" result=\"level4\" />" +
+            "<feComposite in=\"thresh5\" in2=\"dot5-tile\" operator=\"in\" result=\"level5\" />" +
+            "<feComposite in=\"thresh6\" in2=\"dot6-tile\" operator=\"in\" result=\"level6\" />" +
+            "<feComposite in=\"thresh7\" in2=\"dot7-tile\" operator=\"in\" result=\"level7\" />" +
+            "<feComposite in=\"thresh8\" in2=\"dot8-tile\" operator=\"in\" result=\"level8\" />" +
+            "<feMerge result=\"merged\">" +
+            "<feMergeNode in=\"level8\" /><feMergeNode in=\"level7\" /><feMergeNode in=\"level6\" /><feMergeNode in=\"level5\" />" +
+            "<feMergeNode in=\"level4\" /><feMergeNode in=\"level3\" /><feMergeNode in=\"level2\" /><feMergeNode in=\"level1\" />" +
+            "</feMerge>" +
+            "<feComposite in=\"merged\" in2=\"SourceGraphic\" operator=\"in\" result=\"masked\" />" +
+            "<feFlood flood-color=\"" + dotColor + "\" result=\"color\" />" +
+            "<feComposite in=\"color\" in2=\"masked\" operator=\"in\" />" +
+            "</filter>" +
+            "</defs>" +
+            "</svg>";
+    }
+    
+    /**
+     * 递归移除所有JComponent的边框（但保留JTextField的边框）
+     */
+    private void removeAllBorders(Container container) {
+        if (container instanceof JComponent && !(container instanceof JTextField)) {
+            ((JComponent) container).setBorder(null);
+        }
+        for (Component child : container.getComponents()) {
+            if (child instanceof Container) {
+                // 保留JTextField的边框
+                if (child instanceof JComponent && !(child instanceof JTextField)) {
+                    ((JComponent) child).setBorder(null);
+                }
+                removeAllBorders((Container) child);
+            }
+        }
     }
     
     /**

@@ -21,6 +21,16 @@
     ]]></description>
 
     <change-notes><![CDATA[
+    <h3>v1.1.0</h3>
+    <ul>
+        <li><b>Preview Mode Selection</b>: Switch between bottom panel preview and hover tooltip preview in settings</li>
+        <li><b>Image Filter Modes</b>: Added normal/grayscale/halftone(dot matrix) filter options for images</li>
+        <li>Halftone filter creates a retro dot-matrix effect on images</li>
+        <li>Image hover delay: 0.5s delay before restoring color in grayscale/halftone modes</li>
+        <li>Improved UI: Removed unwanted borders from plugin window</li>
+        <li>Various UI polish and bug fixes</li>
+    </ul>
+    
     <h3>v1.0.2</h3>
     <ul>
         <li>Added "Load More" button for topics and replies pagination</li>
